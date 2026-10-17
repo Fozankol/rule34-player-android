@@ -14,8 +14,8 @@
 ## 📥 Скачать APK (Download)
 
 Прямая ссылка на готовый APK-файл для установки на телефон:
-👉 **[Скачать app-release.apk (v2.0.0)](../../releases/latest/download/app-release.apk)**  
-*(Или перейдите во вкладку [Releases](../../releases) и скачайте последнюю версию).*
+👉 **[Скачать app-release.apk (v2.0.0)](https://github.com/Fozankol/rule34-player-android/releases/download/v2.0.0/app-release.apk)**  
+*(Или перейдите во вкладку [Releases](https://github.com/Fozankol/rule34-player-android/releases) и скачайте последнюю версию).*
 
 ### 📲 Как установить:
 1. Скачайте `.apk` на Android-устройство.
@@ -75,7 +75,7 @@
 
 ```bash
 # 1. Клонировать репозиторий
-git clone https://github.com/<username>/rule34-player-android.git
+git clone https://github.com/Fozankol/rule34-player-android.git
 cd rule34-player-android
 
 # 2. Установить зависимости
