@@ -1,4 +1,3 @@
-import 'package:flutter/widgets.dart';
 import 'package:video_player/video_player.dart';
 
 /// Android devices can have only one usable hardware decoder. Serialize native

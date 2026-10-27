@@ -10,6 +10,7 @@ import '../providers/downloads_provider.dart';
 import '../theme/app_theme.dart';
 import '../services/playback_session.dart';
 import '../services/realbooru_service.dart';
+import '../services/video_preload_service.dart';
 import '../l10n/app_strings.dart';
 import 'speed_selector_dialog.dart';
 
@@ -107,16 +108,29 @@ class _ReelsPlayerItemState extends State<ReelsPlayerItem> with WidgetsBindingOb
     }
   }
 
-  Future<void> _initPlayer({bool recovering = false}) async {
+  Future<void> _initPlayer({bool recovering = false, bool forceNetwork = false}) async {
     _release();
     final generation = _generation;
     _error = null;
     _controlsVisible = true;
     VideoPlayerController? controller;
+    String? local = forceNetwork ? null : widget.post.localFilePath;
     try {
-      final local = widget.post.localFilePath;
+      if (!forceNetwork && (local == null || !File(local).existsSync() || File(local).lengthSync() == 0)) {
+        final cached = VideoPreloadService().getCachedFile(widget.post);
+        if (cached != null && cached.existsSync() && cached.lengthSync() > 0) {
+          local = cached.path;
+          widget.post.localFilePath = local;
+        } else {
+          local = null;
+          widget.post.localFilePath = null;
+        }
+      }
+      if (widget.isCurrent) {
+        VideoPreloadService().onVideoActive(widget.post);
+      }
       final headers = getMediaHeaders(widget.post.fileUrl, userAgent: 'Rule34VideoPlayer/1.0');
-      controller = await PlaybackSession.instance.open(() => local != null && File(local).existsSync()
+      controller = await PlaybackSession.instance.open(() => local != null && File(local).existsSync() && File(local).lengthSync() > 0
           ? VideoPlayerController.file(File(local))
           : VideoPlayerController.networkUrl(Uri.parse(widget.post.fileUrl), httpHeaders: headers),
           isCurrent: () => mounted && widget.isCurrent && generation == _generation);
@@ -155,6 +169,14 @@ class _ReelsPlayerItemState extends State<ReelsPlayerItem> with WidgetsBindingOb
         }).catchError((_) {});
       }
     } catch (e) {
+      if (local != null && !forceNetwork) {
+        VideoPreloadService().evict(widget.post.id);
+        widget.post.localFilePath = null;
+        if (mounted && generation == _generation && widget.isCurrent) {
+          _initPlayer(recovering: recovering, forceNetwork: true);
+          return;
+        }
+      }
       if (mounted && generation == _generation && widget.isCurrent) {
         _handleError(e.toString());
       }

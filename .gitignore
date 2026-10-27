@@ -51,3 +51,5 @@ app-release.apk
 # Godot collision prevention
 *.import
 .gdignore
+
+.agents/

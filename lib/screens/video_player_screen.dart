@@ -28,7 +28,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   @override
   void initState() {
     super.initState();
-    _posts.addAll(widget.posts);
+    final seen = <String>{};
+    for (final post in widget.posts) {
+      if (seen.add(post.fileUrl)) {
+        _posts.add(post);
+      }
+    }
     _currentIndex = _posts.isEmpty ? 0 : widget.initialIndex.clamp(0, _posts.length - 1);
     _pageController = PageController(initialPage: _currentIndex);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -36,12 +41,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   void _preloadAdjacentVideos() {
-    if (_currentIndex + 1 < _posts.length) {
-      VideoPreloadService().preloadVideo(_posts[_currentIndex + 1]);
-    }
-    if (_currentIndex + 2 < _posts.length) {
-      VideoPreloadService().preloadVideo(_posts[_currentIndex + 2]);
-    }
+    if (_posts.isEmpty) return;
+    VideoPreloadService().updateSlidingWindow(
+      posts: _posts,
+      currentIndex: _currentIndex,
+    );
   }
 
   void _loadMore() {
@@ -57,8 +61,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       // Duration probing can reorder the feed. Keep already opened videos in
       // place so background updates cannot replace the video being watched.
       final urls = _posts.map((post) => post.fileUrl).toSet();
+      bool added = false;
       for (final post in feed.posts) {
-        if (post.isVideo && urls.add(post.fileUrl)) _posts.add(post);
+        if (post.isVideo && urls.add(post.fileUrl)) {
+          _posts.add(post);
+          added = true;
+        }
+      }
+      if (added) {
+        _preloadAdjacentVideos();
       }
     }
     return Scaffold(backgroundColor: Colors.black,
@@ -92,7 +103,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   @override
   void dispose() {
-    VideoPreloadService().cancelAll();
+    VideoPreloadService().onPlaybackStopped();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _pageController.dispose();
     super.dispose();
