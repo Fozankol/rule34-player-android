@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../models/post_model.dart';
 import '../providers/favorites_provider.dart';
 import '../providers/downloads_provider.dart';
+import '../services/realbooru_service.dart';
+import '../l10n/app_strings.dart';
 
 class PhotoViewerScreen extends StatefulWidget {
   final List<PostModel> posts;
@@ -33,6 +35,27 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
     _currentIndex = widget.initialIndex;
     _pageController = PageController(initialPage: widget.initialIndex);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    _checkEnrichment(_currentIndex);
+  }
+
+  void _checkEnrichment(int index) {
+    if (index >= 0 && index < widget.posts.length) {
+      final post = widget.posts[index];
+      if (post.fileUrl.contains('realbooru.com')) {
+        RealbooruService().getDetails(post).then((detailed) {
+          if (mounted && _currentIndex == index) {
+            post.score = detailed.score;
+            post.hasExactScore = true;
+            if (detailed.tags.isNotEmpty) post.tags = detailed.tags;
+            if (detailed.fileUrl != post.fileUrl) {
+              setState(() {
+                post.fileUrl = detailed.fileUrl;
+              });
+            }
+          }
+        }).catchError((_) {});
+      }
+    }
   }
 
   @override
@@ -130,11 +153,12 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
               setState(() {
                 _currentIndex = idx;
               });
+              _checkEnrichment(idx);
             },
             itemBuilder: (context, index) {
               final post = widget.posts[index];
-              final isRealbooru = post.fileUrl.contains('realbooru.com');
-              final headers = isRealbooru ? {'Referer': 'https://realbooru.com/'} : null;
+              final headers = getMediaHeaders(post.fileUrl.isNotEmpty ? post.fileUrl : post.previewUrl);
+              final previewHeaders = getMediaHeaders(post.previewUrl.isNotEmpty ? post.previewUrl : post.fileUrl);
 
               return GestureDetector(
                 onTap: () {
@@ -148,12 +172,12 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
                     maxScale: 5.0,
                     child: CachedNetworkImage(
                       imageUrl: post.fileUrl.isNotEmpty ? post.fileUrl : post.previewUrl,
-                      httpHeaders: headers,
+                      httpHeaders: headers.isNotEmpty ? headers : null,
                       fit: BoxFit.contain,
                       placeholder: (ctx, url) => Center(
                         child: CachedNetworkImage(
                           imageUrl: post.previewUrl,
-                          httpHeaders: headers,
+                          httpHeaders: previewHeaders.isNotEmpty ? previewHeaders : null,
                           fit: BoxFit.contain,
                         ),
                       ),
@@ -163,10 +187,10 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
                           children: [
                             const Icon(Icons.broken_image_rounded, size: 48, color: Colors.white30),
                             const SizedBox(height: 8),
-                            const Text('Ошибка загрузки изображения', style: TextStyle(color: Colors.white54)),
+                            Text(AppStrings.of(context).imageLoadError, style: const TextStyle(color: Colors.white54)),
                             TextButton(
                               onPressed: () => setState(() {}),
-                              child: const Text('Повторить', style: TextStyle(color: Color(0xFF00C853))),
+                              child: Text(AppStrings.of(context).retry, style: const TextStyle(color: Color(0xFF00C853))),
                             ),
                           ],
                         ),
@@ -187,7 +211,7 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
+                color: Colors.black.withAlpha(153),
                 borderRadius: BorderRadius.circular(24),
               ),
               child: Row(
@@ -227,7 +251,7 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.7),
+                color: Colors.black.withAlpha(179),
                 borderRadius: BorderRadius.circular(32),
                 border: Border.all(color: Colors.white12),
               ),

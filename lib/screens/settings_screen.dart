@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/feed_provider.dart';
+import '../theme/app_theme.dart';
+import '../l10n/app_strings.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -14,6 +16,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _blacklistController = TextEditingController();
   late TextEditingController _userIdController;
   late TextEditingController _apiKeyController;
+  late TextEditingController _gelbooruUserIdController;
+  late TextEditingController _gelbooruApiKeyController;
   bool _isInit = false;
 
   @override
@@ -23,6 +27,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final settings = context.read<SettingsProvider>().settings;
       _userIdController = TextEditingController(text: settings.r34UserId);
       _apiKeyController = TextEditingController(text: settings.r34ApiKey);
+      _gelbooruUserIdController = TextEditingController(text: settings.gelbooruUserId);
+      _gelbooruApiKeyController = TextEditingController(text: settings.gelbooruApiKey);
       _isInit = true;
     }
   }
@@ -32,6 +38,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _blacklistController.dispose();
     _userIdController.dispose();
     _apiKeyController.dispose();
+    _gelbooruUserIdController.dispose();
+    _gelbooruApiKeyController.dispose();
     super.dispose();
   }
 
@@ -51,6 +59,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final newSettings = provider.settings.copyWith(
       r34UserId: _userIdController.text.trim(),
       r34ApiKey: _apiKeyController.text.trim(),
+      gelbooruUserId: _gelbooruUserIdController.text.trim(),
+      gelbooruApiKey: _gelbooruApiKeyController.text.trim(),
     );
     provider.updateSettings(newSettings);
     context.read<FeedProvider>().loadInitial();
@@ -66,23 +76,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final settingsProvider = context.watch<SettingsProvider>();
     final settings = settingsProvider.settings;
+    final tr = AppStrings.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF141419),
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1F1F28),
-        title: const Text(
-          'Настройки',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        backgroundColor: AppTheme.background,
+        title: Text(
+          tr.settings,
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 16),
         children: [
-          // Section: Source Selector
-          _buildSectionHeader('ИСТОЧНИК КАТАЛОГА (SOURCE)'),
+          // Section: Language
+          _buildSectionHeader(tr.languageTitle),
           Container(
-            color: const Color(0xFF1B1B24),
+            color: AppTheme.surface,
+            child: Column(
+              children: [
+                _buildRadioTile(
+                  title: 'Русский',
+                  subtitle: 'Интерфейс на русском языке',
+                  value: 'ru',
+                  groupValue: settings.language,
+                  onChanged: (val) {
+                    settingsProvider.setLanguage(val);
+                  },
+                ),
+                _buildRadioTile(
+                  title: 'English',
+                  subtitle: 'Interface in English',
+                  value: 'en',
+                  groupValue: settings.language,
+                  onChanged: (val) {
+                    settingsProvider.setLanguage(val);
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Section: Source Selector
+          _buildSectionHeader(tr.contentSource),
+          Container(
+            color: AppTheme.surface,
             child: Column(
               children: [
                 _buildRadioTile(
@@ -122,6 +162,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                 ),
                 _buildRadioTile(
+                  title: 'Gelbooru',
+                  subtitle: 'Видео и изображения (User ID и API Key из Account → Options)',
+                  value: 'gelbooru',
+                  groupValue: settings.booruSource,
+                  onChanged: (val) {
+                    settingsProvider.updateSettings(settings.copyWith(booruSource: val));
+                    context.read<FeedProvider>().loadInitial();
+                  },
+                ),
+                _buildRadioTile(
                   title: 'Safebooru',
                   subtitle: 'Работает сразу БЕЗ ключа (безопасный контент)',
                   value: 'safebooru',
@@ -139,9 +189,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
 
           // Section: Rule34 API Authentication
-          _buildSectionHeader('АВТОРИЗАЦИЯ RULE34.XXX API'),
+          _buildSectionHeader('Доступ к Rule34 и Gelbooru'),
           Container(
-            color: const Color(0xFF1B1B24),
+            color: AppTheme.surface,
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -151,7 +201,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   decoration: BoxDecoration(
                     color: const Color(0xFF282834),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.amberAccent.withOpacity(0.4)),
+                    border: Border.all(color: Colors.amberAccent.withAlpha(102)),
                   ),
                   child: const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -208,20 +258,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 14),
+                const Text('Gelbooru: отдельные ключи из gelbooru.com → Account → Options',
+                  style: TextStyle(color: Colors.white70)),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _gelbooruUserIdController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Gelbooru User ID'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _gelbooruApiKeyController,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Gelbooru API Key'),
+                ),
+                const SizedBox(height: 14),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00C853),
+                      backgroundColor: AppTheme.accent,
+                      foregroundColor: const Color(0xFF211B43),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    icon: const Icon(Icons.save_rounded, color: Colors.white),
+                    icon: const Icon(Icons.save_rounded, color: Color(0xFF211B43)),
                     label: const Text(
                       'Сохранить ключи и обновить ленту',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF211B43)),
                     ),
                     onPressed: _saveApiKeys,
                   ),
@@ -232,9 +298,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
 
           // Section: Duration Filter Defaults
-          _buildSectionHeader('ФИЛЬТР ДЛИТЕЛЬНОСТИ ПО УМОЛЧАНИЮ'),
+          _buildSectionHeader('Длительность по умолчанию'),
           Container(
-            color: const Color(0xFF1B1B24),
+            color: AppTheme.surface,
             child: Column(
               children: [
                 _buildRadioTile(
@@ -287,9 +353,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
 
           // Section: Tag Blacklist
-          _buildSectionHeader('ЧЕРНЫЙ СПИСОК ТЕГОВ (BLACKLIST)'),
+          _buildSectionHeader('Скрытые теги'),
           Container(
-            color: const Color(0xFF1B1B24),
+            color: AppTheme.surface,
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -325,7 +391,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(width: 8),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00C853),
+                        backgroundColor: AppTheme.accent,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -342,7 +408,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   runSpacing: 6,
                   children: settings.blacklistedTags.map((tag) {
                     return Chip(
-                      backgroundColor: const Color(0xFFB71C1C).withOpacity(0.3),
+                      backgroundColor: const Color(0xFFB71C1C).withAlpha(77),
                       side: const BorderSide(color: Colors.redAccent, width: 0.8),
                       label: Text(
                         tag,
@@ -364,9 +430,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
 
           // Section: Network & Privacy (DoH & Proxy)
-          _buildSectionHeader('СЕТЬ И ПРИВАТНОСТЬ (ОБХОД БЛОКИРОВОК)'),
+          _buildSectionHeader('Сеть и приватность'),
           Container(
-            color: const Color(0xFF1B1B24),
+            color: AppTheme.surface,
             child: Column(
               children: [
                 SwitchListTile(
@@ -376,7 +442,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: TextStyle(color: Colors.white54, fontSize: 12),
                   ),
                   value: settings.enableDoh,
-                  activeColor: Colors.greenAccent,
                   onChanged: (val) {
                     settingsProvider.updateSettings(settings.copyWith(enableDoh: val));
                   },
@@ -387,7 +452,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     trailing: DropdownButton<String>(
                       value: settings.dohProvider,
                       dropdownColor: const Color(0xFF282834),
-                      style: const TextStyle(color: Colors.greenAccent),
+                      style: const TextStyle(color: AppTheme.accent),
                       underline: const SizedBox.shrink(),
                       items: const [
                         DropdownMenuItem(value: 'cloudflare', child: Text('Cloudflare (1.1.1.1)')),
@@ -407,34 +472,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
 
           // Section: Storage & Cache
-          _buildSectionHeader('ПАМЯТЬ И КЭШ'),
+          _buildSectionHeader(tr.storageAndCache),
           Container(
-            color: const Color(0xFF1B1B24),
+            color: AppTheme.surface,
             child: ListTile(
               leading: const Icon(Icons.delete_sweep_outlined, color: Colors.amberAccent),
-              title: const Text('Очистить кэш метаданных', style: TextStyle(color: Colors.white)),
-              subtitle: const Text(
-                'Сбросить сохраненные длительности роликов в базе данных',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
+              title: Text(tr.clearMetadataCache, style: const TextStyle(color: Colors.white)),
+              subtitle: Text(
+                tr.clearCacheSubtitle,
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
               ),
               onTap: () async {
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (ctx) => AlertDialog(
                     backgroundColor: const Color(0xFF1F1F28),
-                    title: const Text('Очистить кэш?', style: TextStyle(color: Colors.white)),
-                    content: const Text(
-                      'Все предварительно полученные данные о длительности видео будут удалены из локальной базы данных.',
-                      style: TextStyle(color: Colors.white70),
+                    title: Text(tr.clearCacheConfirmTitle, style: const TextStyle(color: Colors.white)),
+                    content: Text(
+                      tr.clearCacheConfirmText,
+                      style: const TextStyle(color: Colors.white70),
                     ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Отмена', style: TextStyle(color: Colors.white54)),
+                        child: Text(tr.cancel, style: const TextStyle(color: Colors.white54)),
                       ),
                       TextButton(
                         onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('Очистить', style: TextStyle(color: Colors.redAccent)),
+                        child: Text(tr.delete, style: const TextStyle(color: Colors.redAccent)),
                       ),
                     ],
                   ),
@@ -444,9 +509,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   await settingsProvider.clearAllCache();
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Кэш метаданных успешно очищен'),
-                        backgroundColor: Color(0xFF00C853),
+                      SnackBar(
+                        content: Text(tr.cacheCleared),
+                        backgroundColor: const Color(0xFF00C853),
                       ),
                     );
                   }
@@ -483,10 +548,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Text(
         title,
         style: const TextStyle(
-          color: Color(0xFF00C853),
-          fontSize: 12,
+          color: AppTheme.muted,
+          fontSize: 15,
           fontWeight: FontWeight.bold,
-          letterSpacing: 1.0,
         ),
       ),
     );
@@ -499,15 +563,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String groupValue,
     required ValueChanged<String> onChanged,
   }) {
-    return RadioListTile<String>(
+    final selected = value == groupValue;
+    return Material(color: Colors.transparent, child: ListTile(
+      selected: selected,
+      selectedTileColor: AppTheme.raised,
+      leading: Icon(selected ? Icons.check_circle_rounded : Icons.circle_outlined,
+        color: selected ? AppTheme.accent : AppTheme.muted),
       title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 14)),
       subtitle: Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-      value: value,
-      groupValue: groupValue,
-      activeColor: const Color(0xFF00C853),
-      onChanged: (val) {
-        if (val != null) onChanged(val);
-      },
-    );
+      onTap: () => onChanged(value),
+    ));
   }
 }

@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../models/post_model.dart';
 import '../providers/feed_provider.dart';
 import '../widgets/reels_player_item.dart';
+import '../services/video_preload_service.dart';
+import '../l10n/app_strings.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
   final List<PostModel> posts;
@@ -11,136 +13,88 @@ class VideoPlayerScreen extends StatefulWidget {
   final bool isFromFeed;
   final Function(String tag)? onTagSelected;
 
-  const VideoPlayerScreen({
-    super.key,
-    required this.posts,
-    required this.initialIndex,
-    this.isFromFeed = true,
-    this.onTagSelected,
-  });
+  const VideoPlayerScreen({super.key, required this.posts, required this.initialIndex,
+    this.isFromFeed = true, this.onTagSelected});
 
   @override
   State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
 }
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
-  late PageController _pageController;
+  late final PageController _pageController;
   late int _currentIndex;
+  final List<PostModel> _posts = [];
 
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialIndex;
-    _pageController = PageController(initialPage: widget.initialIndex);
+    _posts.addAll(widget.posts);
+    _currentIndex = _posts.isEmpty ? 0 : widget.initialIndex.clamp(0, _posts.length - 1);
+    _pageController = PageController(initialPage: _currentIndex);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    _preloadAdjacentVideos();
   }
 
-  @override
-  void dispose() {
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  void _checkAutoLoadMore(int currentIndex, int totalCount) {
-    if (widget.isFromFeed && currentIndex >= totalCount - 4) {
-      final feed = context.read<FeedProvider>();
-      if (!feed.isLoadingMore && feed.hasMore) {
-        feed.loadMore();
-      }
+  void _preloadAdjacentVideos() {
+    if (_currentIndex + 1 < _posts.length) {
+      VideoPreloadService().preloadVideo(_posts[_currentIndex + 1]);
     }
+    if (_currentIndex + 2 < _posts.length) {
+      VideoPreloadService().preloadVideo(_posts[_currentIndex + 2]);
+    }
+  }
+
+  void _loadMore() {
+    if (!widget.isFromFeed || _currentIndex < _posts.length - 4) return;
+    context.read<FeedProvider>().loadMore();
   }
 
   @override
   Widget build(BuildContext context) {
-    // If opened from main feed, observe reactive posts so dynamically loaded pages appear automatically
-    List<PostModel> currentPosts = widget.posts;
+    final tr = AppStrings.of(context);
     if (widget.isFromFeed) {
-      final feedPosts = context.watch<FeedProvider>().posts.where((p) => p.isVideo).toList();
-      if (feedPosts.isNotEmpty) {
-        currentPosts = feedPosts;
+      final feed = context.watch<FeedProvider>();
+      // Duration probing can reorder the feed. Keep already opened videos in
+      // place so background updates cannot replace the video being watched.
+      final urls = _posts.map((post) => post.fileUrl).toSet();
+      for (final post in feed.posts) {
+        if (post.isVideo && urls.add(post.fileUrl)) _posts.add(post);
       }
     }
-
-    if (currentPosts.isEmpty) {
-      return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(
-          child: Text(
-            'Нет доступных видео',
-            style: TextStyle(color: Colors.white70),
-          ),
-        ),
-      );
-    }
-
-    final safeIndex = _currentIndex.clamp(0, currentPosts.length - 1);
-
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // Reels vertical page view with implicit scrolling for instant pre-buffering
-          PageView.builder(
-            controller: _pageController,
-            scrollDirection: Axis.vertical,
-            allowImplicitScrolling: true,
-            itemCount: currentPosts.length,
+    return Scaffold(backgroundColor: Colors.black,
+      body: _posts.isEmpty
+        ? Center(child: Text(tr.noVideosAvailable, style: const TextStyle(color: Colors.white70)))
+        : PageView.builder(
+            controller: _pageController, scrollDirection: Axis.vertical,
+            itemCount: _posts.length,
+            // Adjacent widgets are cheap; only the current page owns a decoder.
+            allowImplicitScrolling: false,
             onPageChanged: (index) {
-              setState(() {
-                _currentIndex = index;
-              });
-              _checkAutoLoadMore(index, currentPosts.length);
+              setState(() => _currentIndex = index);
+              _loadMore();
+              _preloadAdjacentVideos();
             },
-            itemBuilder: (context, index) {
-              final isCurrent = index == safeIndex;
-              final isPreload = index == safeIndex + 1;
-
-              return ReelsPlayerItem(
-                post: currentPosts[index],
-                isCurrent: isCurrent,
-                isPreload: isPreload,
-                onTagSelected: (tag) {
-                  Navigator.pop(context);
-                  widget.onTagSelected?.call(tag);
-                },
-              );
-            },
-          ),
-
-          // Top navigation bar overlay
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 8,
-            left: 12,
-            right: 12,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-                  onPressed: () => Navigator.pop(context),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text(
-                    '${safeIndex + 1} / ${currentPosts.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 48), // Balance spacing
-              ],
+            itemBuilder: (context, index) => ReelsPlayerItem(
+              key: ValueKey(_posts[index].fileUrl),
+              post: _posts[index], isCurrent: index == _currentIndex,
+              pageLabel: '${index + 1} / ${_posts.length}',
+              onBack: () => Navigator.pop(context),
+              onNext: index + 1 < _posts.length ? () => _pageController.nextPage(
+                duration: const Duration(milliseconds: 220), curve: Curves.easeOut) : null,
+              onTagSelected: (tag) {
+                Navigator.pop(context);
+                widget.onTagSelected?.call(tag);
+              },
             ),
           ),
-        ],
-      ),
     );
+  }
+
+  @override
+  void dispose() {
+    VideoPreloadService().cancelAll();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    _pageController.dispose();
+    super.dispose();
   }
 }

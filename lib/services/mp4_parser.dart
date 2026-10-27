@@ -57,6 +57,7 @@ class Mp4Parser {
         if (size64 < 16) break;
         headerSize = 16;
         payloadSize = size64 - 16;
+        boxSize = size64;
       } else if (boxSize == 0) {
         // Box extends to end of available buffer
         payloadSize = end - (offset + headerSize);
@@ -117,7 +118,7 @@ class Mp4Parser {
   }
 
   static double? _parseMvhd(ByteData data, int start, int end) {
-    if (start + 24 > end) return null;
+    if (start + 20 > end) return null;
     final version = data.getUint8(start);
 
     int timescale;

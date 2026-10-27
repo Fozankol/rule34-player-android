@@ -5,6 +5,7 @@ import '../../lib/models/post_model.dart';
 import '../../lib/services/mp4_parser.dart';
 import '../../lib/services/metadata_prober.dart';
 import '../../lib/services/database_service.dart';
+import '../../lib/models/video_metadata.dart';
 
 Uint8List buildMp4Buffer(int durationSeconds) {
   // mvhd box: 32 bytes
@@ -142,6 +143,40 @@ void main() {
       final cached = await dbService.getMetadata(7777);
       expect(cached, isNotNull);
       expect(cached!.durationSeconds, equals(195.0));
+    });
+
+    test('Cached duration from another source with the same ID is ignored', () async {
+      await dbService.saveMetadata(VideoMetadata(
+        postId: 999,
+        fileUrl: 'https://other.example/video.mp4',
+        durationSeconds: 600,
+        checkedAt: 0,
+      ));
+      final post = PostModel(
+        id: 999, score: 0, fileUrl: '$serverUrl/video.mp4',
+        previewUrl: '', sampleUrl: '', tags: [], width: 0, height: 0,
+      );
+      await MetadataProber().probeBatch([post], dbService: dbService);
+      expect(post.duration, 195);
+    });
+
+    test('Batch rejects zero concurrency instead of hanging', () async {
+      await expectLater(
+        MetadataProber().probeBatch([], concurrency: 0),
+        throwsArgumentError,
+      );
+    });
+
+    test('Batch propagates callback failures', () async {
+      final post = PostModel(
+        id: 998, score: 0, fileUrl: '$serverUrl/video.mp4',
+        previewUrl: '', sampleUrl: '', tags: [], width: 0, height: 0,
+      );
+      await expectLater(MetadataProber().probeBatch(
+        [post],
+        dbService: dbService,
+        onProbed: (_) => throw StateError('callback failed'),
+      ), throwsStateError);
     });
 
     test('MetadataProber safely handles HTTP 200 OK without downloading the full large file', () async {

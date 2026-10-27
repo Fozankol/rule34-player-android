@@ -62,10 +62,10 @@ class WebmParser {
     int height = 0;
 
     while (offset < end - 2) {
-      final idInfo = _readVint(bytes, offset, maskLength: false);
-      if (idInfo == null) break;
-      final elementId = idInfo[0];
-      offset += idInfo[1];
+      final elementIdInfo = _readVint(bytes, offset, maskLength: false);
+      if (elementIdInfo == null) break;
+      final elementId = elementIdInfo[0];
+      offset += elementIdInfo[1];
 
       final sizeInfo = _readVint(bytes, offset, maskLength: true);
       if (sizeInfo == null) break;
@@ -212,7 +212,7 @@ class WebmParser {
   }
 
   static int _readUint(ByteData data, int offset, int size) {
-    if (offset + size > data.lengthInBytes) return 0;
+    if (size <= 0 || size > 8 || offset + size > data.lengthInBytes) return 0;
     int val = 0;
     for (int i = 0; i < size; i++) {
       val = (val << 8) | data.getUint8(offset + i);

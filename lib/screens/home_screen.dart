@@ -5,12 +5,14 @@ import '../providers/feed_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/video_grid_card.dart';
 import '../widgets/filter_bottom_sheet.dart';
+import '../theme/app_theme.dart';
 import 'video_player_screen.dart';
 import 'photo_viewer_screen.dart';
 import 'search_screen.dart';
 import 'favorites_screen.dart';
 import 'downloads_screen.dart';
 import 'settings_screen.dart';
+import '../l10n/app_strings.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -71,8 +73,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final tr = AppStrings.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF121217),
+      backgroundColor: AppTheme.background,
       body: IndexedStack(
         index: _selectedTabIndex,
         children: [
@@ -84,33 +87,33 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedTabIndex,
-        backgroundColor: const Color(0xFF1B1B22),
-        indicatorColor: const Color(0xFF00C853).withOpacity(0.25),
+        backgroundColor: AppTheme.surface,
+        indicatorColor: AppTheme.raised,
         onDestinationSelected: (idx) {
           setState(() {
             _selectedTabIndex = idx;
           });
         },
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.explore_outlined, color: Colors.white70),
-            selectedIcon: Icon(Icons.explore, color: Color(0xFF00C853)),
-            label: 'Лента',
+            icon: const Icon(Icons.explore_outlined, color: Colors.white70),
+            selectedIcon: const Icon(Icons.explore, color: AppTheme.accent),
+            label: tr.feed,
           ),
           NavigationDestination(
-            icon: Icon(Icons.favorite_outline, color: Colors.white70),
-            selectedIcon: Icon(Icons.favorite, color: Colors.redAccent),
-            label: 'Избранное',
+            icon: const Icon(Icons.favorite_outline, color: Colors.white70),
+            selectedIcon: const Icon(Icons.favorite, color: Colors.redAccent),
+            label: tr.favorites,
           ),
           NavigationDestination(
-            icon: Icon(Icons.download_outlined, color: Colors.white70),
-            selectedIcon: Icon(Icons.download, color: Color(0xFF00C853)),
-            label: 'Загрузки',
+            icon: const Icon(Icons.download_outlined, color: Colors.white70),
+            selectedIcon: const Icon(Icons.download, color: AppTheme.accent),
+            label: tr.downloads,
           ),
           NavigationDestination(
-            icon: Icon(Icons.settings_outlined, color: Colors.white70),
-            selectedIcon: Icon(Icons.settings, color: Color(0xFF00C853)),
-            label: 'Настройки',
+            icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+            selectedIcon: const Icon(Icons.settings, color: AppTheme.accent),
+            label: tr.settings,
           ),
         ],
       ),
@@ -118,99 +121,34 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFeedTab() {
+    final tr = AppStrings.of(context);
     final feed = context.watch<FeedProvider>();
     final settings = context.watch<SettingsProvider>().settings;
     final filter = feed.filterOptions;
     final posts = feed.posts;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121217),
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1B1B22),
+        backgroundColor: AppTheme.background,
         elevation: 0,
         titleSpacing: 12,
         title: Row(
           children: [
-            const Icon(Icons.movie_filter_rounded, color: Color(0xFF00C853), size: 24),
+            const Icon(Icons.play_circle_outline_rounded, color: AppTheme.accent, size: 28),
             const SizedBox(width: 8),
-            const Text(
-              'R34',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(width: 12),
-
-            // Content Type Segment Pill (Все / Видео / Фото)
-            Container(
-              padding: const EdgeInsets.all(2),
-              decoration: BoxDecoration(
-                color: const Color(0xFF282834),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildTypeSegmentButton(
-                    label: 'Все',
-                    type: ContentTypeFilter.all,
-                    current: filter.contentType,
-                    onTap: () => feed.setContentType(ContentTypeFilter.all),
-                  ),
-                  _buildTypeSegmentButton(
-                    label: 'Видео',
-                    type: ContentTypeFilter.videoOnly,
-                    current: filter.contentType,
-                    onTap: () => feed.setContentType(ContentTypeFilter.videoOnly),
-                  ),
-                  _buildTypeSegmentButton(
-                    label: 'Фото',
-                    type: ContentTypeFilter.photoOnly,
-                    current: filter.contentType,
-                    onTap: () => feed.setContentType(ContentTypeFilter.photoOnly),
-                  ),
-                ],
-              ),
-            ),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(tr.library, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+              Text(const {'rule34': 'Rule34', 'realbooru': 'Realbooru', 'gelbooru': 'Gelbooru',
+                'tbib': 'TBIB', 'safebooru': 'Safebooru'}[settings.booruSource] ?? settings.booruSource,
+                style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
+            ])),
           ],
         ),
         actions: [
-          // Duration Filter Quick Pill (only when videos are included)
-          if (filter.contentType != ContentTypeFilter.photoOnly)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: GestureDetector(
-                onTap: _openFilterBottomSheet,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF00C853).withOpacity(0.18),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF00C853), width: 0.8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.timer_outlined, size: 12, color: Color(0xFF00E676)),
-                      const SizedBox(width: 4),
-                      Text(
-                        _getPresetLabel(filter.preset, filter.minDurationSeconds),
-                        style: const TextStyle(
-                          color: Color(0xFF00E676),
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
           IconButton(
             icon: const Icon(Icons.search, color: Colors.white),
-            tooltip: 'Поиск по тегам',
+            tooltip: tr.searchTags,
             onPressed: () {
               Navigator.push(
                 context,
@@ -220,10 +158,31 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.tune_rounded, color: Colors.white),
-            tooltip: 'Фильтры',
+            tooltip: tr.filters,
             onPressed: _openFilterBottomSheet,
           ),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(64),
+          child: SingleChildScrollView(scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            child: Row(children: [
+              for (final type in ContentTypeFilter.values)
+                Padding(padding: const EdgeInsets.only(right: 8), child: _buildTypeSegmentButton(
+                  label: [tr.all, tr.videos, tr.photos][type.index], type: type,
+                  current: filter.contentType, onTap: () => feed.setContentType(type))),
+              const SizedBox(width: 8),
+              ActionChip(avatar: const Icon(Icons.tune_rounded, size: 16),
+                label: Text(filter.minScore > 0 ? '${filter.minScore}+ лайков' : 'Фильтры'),
+                onPressed: _openFilterBottomSheet),
+              if (filter.contentType != ContentTypeFilter.photoOnly) ...[
+                const SizedBox(width: 8),
+                ActionChip(avatar: const Icon(Icons.timer_outlined, size: 16),
+                  label: Text(_getPresetLabel(filter.preset, filter.minDurationSeconds)),
+                  onPressed: _openFilterBottomSheet),
+              ],
+            ])),
+        ),
       ),
       body: Column(
         children: [
@@ -261,7 +220,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              color: const Color(0xFF1E281F),
+              color: AppTheme.surface,
               child: Row(
                 children: [
                   const SizedBox(
@@ -269,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     height: 14,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Color(0xFF00E676),
+                      color: AppTheme.accent,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -277,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Text(
                       feed.deepScanStatus,
                       style: const TextStyle(
-                        color: Color(0xFF00E676),
+                        color: AppTheme.accent,
                         fontSize: 11.5,
                         fontWeight: FontWeight.w600,
                       ),
@@ -298,7 +257,7 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: BoxDecoration(
                 color: const Color(0xFF332005),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.amberAccent.withOpacity(0.6), width: 0.8),
+                border: Border.all(color: Colors.amberAccent.withAlpha(153), width: 0.8),
               ),
               child: Row(
                 children: [
@@ -347,11 +306,11 @@ class _HomeScreenState extends State<HomeScreen> {
           // Main Grid Content
           Expanded(
             child: feed.isLoading && posts.isEmpty
-                ? Center(
+                ? Center(child: SingleChildScrollView(padding: const EdgeInsets.all(24),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const CircularProgressIndicator(color: Color(0xFF00C853)),
+                        const CircularProgressIndicator(color: AppTheme.accent),
                         const SizedBox(height: 16),
                         Text(
                           'Ищем контент (${_getPresetLabel(filter.preset, filter.minDurationSeconds)})...',
@@ -363,15 +322,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 6),
                         const Text(
-                          'Глубокое сканирование и проверка контейнеров...',
+                          'Подбираем публикации по вашим фильтрам',
                           style: TextStyle(color: Colors.white38, fontSize: 12),
                         ),
                       ],
                     ),
-                  )
+                  ))
                 : feed.errorMessage != null && posts.isEmpty
                     ? Center(
-                        child: Padding(
+                        child: SingleChildScrollView(
                           padding: const EdgeInsets.all(24),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -386,7 +345,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               const SizedBox(height: 16),
                               ElevatedButton(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF00C853),
+                                  backgroundColor: AppTheme.accent,
+                                  foregroundColor: const Color(0xFF211B43),
                                 ),
                                 onPressed: () {
                                   if (feed.errorMessage!.contains('API-ключ') ||
@@ -411,7 +371,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       )
                     : posts.isEmpty
                         ? Center(
-                            child: Padding(
+                            child: SingleChildScrollView(
                               padding: const EdgeInsets.all(24),
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
@@ -446,7 +406,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                       ElevatedButton(
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: const Color(0xFF00C853),
+                                          backgroundColor: AppTheme.accent,
+                                          foregroundColor: const Color(0xFF211B43),
                                         ),
                                         onPressed: () => feed.setDurationPreset(DurationFilterPreset.all),
                                         child: const Text('Сбросить длительность'),
@@ -458,19 +419,19 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           )
                         : RefreshIndicator(
-                            color: const Color(0xFF00C853),
+                            color: AppTheme.accent,
                             backgroundColor: const Color(0xFF1B1B22),
                             onRefresh: () => feed.refresh(),
                             child: GridView.builder(
                               controller: _scrollController,
-                              padding: const EdgeInsets.all(8),
+                              padding: const EdgeInsets.all(12),
                               physics: const AlwaysScrollableScrollPhysics(),
                               gridDelegate:
-                                  const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
+                                   SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: (MediaQuery.of(context).size.width / 180).floor().clamp(2, 5),
                                 childAspectRatio: 0.72,
-                                crossAxisSpacing: 8,
-                                mainAxisSpacing: 8,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
                               ),
                               itemCount: posts.length + (feed.isLoadingMore ? 2 : 0),
                               itemBuilder: (context, index) {
@@ -483,7 +444,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     child: const Center(
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
-                                        color: Color(0xFF00C853),
+                                        color: AppTheme.accent,
                                       ),
                                     ),
                                   );
@@ -492,11 +453,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                 final post = posts[index];
                                 return VideoGridCard(
                                   post: post,
-                                  onTap: () {
+                                  onTap: () async {
                                     if (post.isVideo) {
                                       final videoList = posts.where((p) => p.isVideo).toList();
                                       final vIndex = videoList.indexOf(post);
-                                      Navigator.push(
+                                      await Navigator.push(
                                         context,
                                         MaterialPageRoute(
                                           builder: (_) => VideoPlayerScreen(
@@ -509,10 +470,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                           ),
                                         ),
                                       );
+                                      if (mounted) setState(() {});
                                     } else {
                                       final photoList = posts.where((p) => !p.isVideo).toList();
                                       final pIndex = photoList.indexOf(post);
-                                      Navigator.push(
+                                      await Navigator.push(
                                         context,
                                         MaterialPageRoute(
                                           builder: (_) => PhotoViewerScreen(
@@ -524,6 +486,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           ),
                                         ),
                                       );
+                                      if (mounted) setState(() {});
                                     }
                                   },
                                 );
@@ -546,16 +509,16 @@ class _HomeScreenState extends State<HomeScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF00C853) : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
+          color: isSelected ? AppTheme.accent : AppTheme.surface,
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.white : Colors.white70,
-            fontSize: 11,
+            color: isSelected ? const Color(0xFF211B43) : AppTheme.muted,
+            fontSize: 13,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),

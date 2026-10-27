@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/filter_options.dart';
 import '../providers/feed_provider.dart';
+import '../theme/app_theme.dart';
+import '../l10n/app_strings.dart';
 
 class FilterBottomSheet extends StatefulWidget {
   const FilterBottomSheet({super.key});
@@ -28,13 +30,15 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final tr = AppStrings.of(context);
     final feed = context.watch<FeedProvider>();
     final isPhotoOnly = feed.filterOptions.contentType == ContentTypeFilter.photoOnly;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * .85),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + MediaQuery.of(context).padding.bottom),
       decoration: const BoxDecoration(
-        color: Color(0xFF1B1B22),
+        color: AppTheme.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: SingleChildScrollView(
@@ -59,14 +63,14 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Фильтры поиска',
-                  style: TextStyle(
+                Expanded(child: Text(
+                  tr.searchFilters,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
-                ),
+                )),
                 IconButton(
                   icon: const Icon(Icons.close, color: Colors.white70, size: 20),
                   onPressed: () => Navigator.pop(context),
@@ -77,9 +81,9 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
 
             // Duration Section (hidden or disabled if photo-only)
             if (!isPhotoOnly) ...[
-              const Text(
-                'Продолжительность видео',
-                style: TextStyle(
+              Text(
+                tr.videoDuration,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
@@ -91,11 +95,11 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _buildPresetChip('Все', DurationFilterPreset.all),
-                  _buildPresetChip('> 2 мин', DurationFilterPreset.gt2min, isRecommended: true),
-                  _buildPresetChip('> 5 мин', DurationFilterPreset.gt5min),
-                  _buildPresetChip('> 10 мин', DurationFilterPreset.gt10min),
-                  _buildPresetChip('Свой диапазон', DurationFilterPreset.custom),
+                  _buildPresetChip(tr.all, DurationFilterPreset.all),
+                  _buildPresetChip(tr.gt2min, DurationFilterPreset.gt2min, isRecommended: true),
+                  _buildPresetChip(tr.gt5min, DurationFilterPreset.gt5min),
+                  _buildPresetChip(tr.gt10min, DurationFilterPreset.gt10min),
+                  _buildPresetChip(tr.customDuration, DurationFilterPreset.custom),
                 ],
               ),
 
@@ -106,13 +110,13 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'Минимальная длительность:',
+                      'От',
                       style: TextStyle(color: Colors.white70, fontSize: 14),
                     ),
                     Text(
                       '${_customMinutes.toStringAsFixed(1)} мин',
                       style: const TextStyle(
-                        color: Colors.greenAccent,
+                        color: AppTheme.accent,
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
                       ),
@@ -122,9 +126,9 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                 Slider(
                   value: _customMinutes,
                   min: 0.5,
-                  max: 30.0,
-                  divisions: 59,
-                  activeColor: Colors.greenAccent,
+                  max: 60.0,
+                  divisions: 119,
+                  activeColor: AppTheme.accent,
                   inactiveColor: Colors.white24,
                   label: '${_customMinutes.toStringAsFixed(1)} мин',
                   onChanged: (val) {
@@ -138,9 +142,9 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
             ],
 
             // Minimum Score / Likes Section
-            const Text(
-              'Минимум лайков (Score)',
-              style: TextStyle(
+            Text(
+              tr.minLikes,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
@@ -149,8 +153,10 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
+              runSpacing: 8,
               children: [
-                _buildScoreChip('Любой', 0),
+                _buildScoreChip(tr.anyScore, 0),
+                _buildScoreChip('10+', 10),
                 _buildScoreChip('50+', 50),
                 _buildScoreChip('100+', 100),
                 _buildScoreChip('500+', 500),
@@ -160,9 +166,9 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
             const Divider(color: Colors.white12, height: 24),
 
             // Sort Section
-            const Text(
-              'Сортировка',
-              style: TextStyle(
+            Text(
+              tr.sorting,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
@@ -173,10 +179,10 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
             Wrap(
               spacing: 8,
               children: [
-                _buildSortChip('Новые', SortOption.newest, Icons.access_time),
-                _buildSortChip('По рейтингу', SortOption.score, Icons.favorite),
+                _buildSortChip(tr.newestFirst, SortOption.newest, Icons.access_time),
+                _buildSortChip(tr.byScore, SortOption.score, Icons.favorite),
                 if (!isPhotoOnly)
-                  _buildSortChip('По длине', SortOption.duration, Icons.timer),
+                  _buildSortChip(tr.byDuration, SortOption.duration, Icons.timer),
               ],
             ),
 
@@ -188,8 +194,8 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
               height: 48,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00C853),
-                  foregroundColor: Colors.white,
+                  backgroundColor: AppTheme.accent,
+                  foregroundColor: const Color(0xFF211B43),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -222,9 +228,9 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
 
                   Navigator.pop(context);
                 },
-                child: const Text(
-                  'Применить',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                child: Text(
+                  tr.apply,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -252,10 +258,10 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
         ],
       ),
       selected: isSelected,
-      selectedColor: const Color(0xFF00C853),
-      backgroundColor: const Color(0xFF282832),
+      selectedColor: AppTheme.accent,
+      backgroundColor: AppTheme.raised,
       labelStyle: TextStyle(
-        color: isSelected ? Colors.white : Colors.white70,
+        color: isSelected ? const Color(0xFF211B43) : AppTheme.text,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
       ),
       onSelected: (selected) {
@@ -274,14 +280,14 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
       avatar: Icon(
         Icons.favorite,
         size: 13,
-        color: isSelected ? Colors.white : Colors.redAccent,
+        color: isSelected ? const Color(0xFF211B43) : AppTheme.error,
       ),
       label: Text(label),
       selected: isSelected,
-      selectedColor: Colors.redAccent,
-      backgroundColor: const Color(0xFF282832),
+      selectedColor: AppTheme.accent,
+      backgroundColor: AppTheme.raised,
       labelStyle: TextStyle(
-        color: isSelected ? Colors.white : Colors.white70,
+        color: isSelected ? const Color(0xFF211B43) : AppTheme.text,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
       ),
       onSelected: (selected) {
@@ -300,14 +306,14 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
       avatar: Icon(
         icon,
         size: 14,
-        color: isSelected ? Colors.white : Colors.white70,
+        color: isSelected ? const Color(0xFF211B43) : AppTheme.text,
       ),
       label: Text(label),
       selected: isSelected,
-      selectedColor: const Color(0xFF6200EA),
-      backgroundColor: const Color(0xFF282832),
+      selectedColor: AppTheme.accent,
+      backgroundColor: AppTheme.raised,
       labelStyle: TextStyle(
-        color: isSelected ? Colors.white : Colors.white70,
+        color: isSelected ? const Color(0xFF211B43) : AppTheme.text,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
       ),
       onSelected: (selected) {

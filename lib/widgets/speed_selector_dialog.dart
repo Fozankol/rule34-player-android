@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
+import '../l10n/app_strings.dart';
 
 class SpeedSelectorDialog extends StatelessWidget {
   final double currentSpeed;
@@ -15,13 +17,13 @@ class SpeedSelectorDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: const Color(0xFF1F1F28),
+      backgroundColor: AppTheme.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text(
-        'Скорость воспроизведения',
-        style: TextStyle(color: Colors.white, fontSize: 16),
+      title: Text(
+        AppStrings.of(context).isRu ? 'Скорость воспроизведения' : 'Playback Speed',
+        style: const TextStyle(color: Colors.white, fontSize: 16),
       ),
-      content: Column(
+      content: SingleChildScrollView(child: Column(
         mainAxisSize: MainAxisSize.min,
         children: speeds.map((spd) {
           final isSelected = (currentSpeed - spd).abs() < 0.01;
@@ -29,12 +31,12 @@ class SpeedSelectorDialog extends StatelessWidget {
             title: Text(
               '${spd}x',
               style: TextStyle(
-                color: isSelected ? Colors.greenAccent : Colors.white70,
+                color: isSelected ? AppTheme.accent : AppTheme.muted,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               ),
             ),
             trailing: isSelected
-                ? const Icon(Icons.check, color: Colors.greenAccent)
+                ? const Icon(Icons.check, color: AppTheme.accent)
                 : null,
             onTap: () {
               onSpeedSelected(spd);
@@ -42,7 +44,7 @@ class SpeedSelectorDialog extends StatelessWidget {
             },
           );
         }).toList(),
-      ),
+      )),
     );
   }
 }

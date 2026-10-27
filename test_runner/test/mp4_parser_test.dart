@@ -59,6 +59,16 @@ Uint8List createFtypBox() {
 }
 
 void main() {
+  test('Reads duration from an extended-size mvhd box', () {
+    final bytes = Uint8List(36);
+    final data = ByteData.sublistView(bytes);
+    data.setUint32(0, 1);
+    bytes.setRange(4, 8, 'mvhd'.codeUnits);
+    data.setUint64(8, bytes.length);
+    data.setUint32(28, 1000);
+    data.setUint32(32, 180000);
+    expect(Mp4Parser.parse(bytes)!.durationSeconds, 180);
+  });
   group('Mp4Parser Tests', () {
     test('Correctly parses fast-start MP4 with version 0 mvhd (duration = 180s / 3m)', () {
       final ftyp = createFtypBox();

@@ -3,14 +3,21 @@ import '../models/app_settings.dart';
 import '../services/settings_service.dart';
 import '../services/database_service.dart';
 import '../services/api_service.dart';
+import '../services/video_preload_service.dart';
 
 class SettingsProvider extends ChangeNotifier {
   final SettingsService _settingsService = SettingsService();
   final DatabaseService _dbService = DatabaseService();
   final ApiService _apiService = ApiService();
 
-  AppSettings _settings = AppSettings();
+  AppSettings _settings = SettingsService().settings;
   AppSettings get settings => _settings;
+  String get language => _settings.language;
+
+  Future<void> setLanguage(String lang) async {
+    final updated = _settings.copyWith(language: lang);
+    await updateSettings(updated);
+  }
 
   SettingsProvider() {
     _load();
@@ -24,6 +31,7 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> updateSettings(AppSettings newSettings) async {
     _settings = newSettings;
+    _apiService.updateSettings(newSettings);
     await _settingsService.saveSettings(newSettings);
     _apiService.updateSettings(newSettings);
     notifyListeners();
@@ -47,6 +55,7 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> clearAllCache() async {
     await _dbService.clearMetadataCache();
+    await VideoPreloadService().clearAll();
     notifyListeners();
   }
 }

@@ -5,6 +5,8 @@ import '../providers/favorites_provider.dart';
 import '../widgets/video_grid_card.dart';
 import 'video_player_screen.dart';
 import 'photo_viewer_screen.dart';
+import '../theme/app_theme.dart';
+import '../l10n/app_strings.dart';
 
 class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
@@ -30,33 +32,34 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
       displayedFavs = allFavs;
     }
 
+    final tr = AppStrings.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF141419),
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1F1F28),
+        backgroundColor: AppTheme.background,
         title: Text(
-          'Избранное (${allFavs.length})',
+          '${tr.favorites} (${allFavs.length})',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(44),
-          child: Container(
+          preferredSize: const Size.fromHeight(60),
+          child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             alignment: Alignment.centerLeft,
             child: Row(
               children: [
-                _buildFilterChip('Все (${allFavs.length})', 0),
+                _buildFilterChip('${tr.all} (${allFavs.length})', 0),
                 const SizedBox(width: 8),
-                _buildFilterChip('Видео (${allFavs.where((p) => p.isVideo).length})', 1),
+                _buildFilterChip('${tr.videos} (${allFavs.where((p) => p.isVideo).length})', 1),
                 const SizedBox(width: 8),
-                _buildFilterChip('Фото (${allFavs.where((p) => !p.isVideo).length})', 2),
+                _buildFilterChip('${tr.photos} (${allFavs.where((p) => !p.isVideo).length})', 2),
               ],
             ),
-          ),
+          )),
         ),
       ),
       body: favProvider.isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.greenAccent))
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.accent))
           : displayedFavs.isEmpty
               ? Center(
                   child: Column(
@@ -65,11 +68,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                       const Icon(Icons.favorite_border, size: 64, color: Colors.white24),
                       const SizedBox(height: 16),
                       Text(
-                        _selectedFilterIndex == 1
-                            ? 'Нет сохраненных видео'
-                            : _selectedFilterIndex == 2
-                                ? 'Нет сохраненных фото'
-                                : 'В избранном пока пусто',
+                        tr.noFavoritesYet,
                         style: const TextStyle(color: Colors.white54, fontSize: 16),
                       ),
                       const SizedBox(height: 6),
@@ -81,16 +80,16 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                   ),
                 )
               : RefreshIndicator(
-                  color: Colors.greenAccent,
-                  backgroundColor: const Color(0xFF1F1F28),
+                  color: AppTheme.accent,
+                  backgroundColor: AppTheme.surface,
                   onRefresh: () => favProvider.loadFavorites(),
                   child: GridView.builder(
-                    padding: const EdgeInsets.all(8),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
+                    padding: const EdgeInsets.all(12),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: (MediaQuery.of(context).size.width / 180).floor().clamp(2, 5),
                       childAspectRatio: 0.72,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
                     ),
                     itemCount: displayedFavs.length,
                     itemBuilder: (context, index) {
@@ -141,16 +140,16 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         });
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF00C853) : const Color(0xFF2C2C38),
+          color: isSelected ? AppTheme.accent : AppTheme.surface,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.white : Colors.white70,
-            fontSize: 11,
+            color: isSelected ? const Color(0xFF211B43) : AppTheme.muted,
+            fontSize: 13,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),

@@ -48,6 +48,23 @@ Uint8List createWebmInfoElement({
 
 void main() {
   group('WebmParser Tests', () {
+    test('Uses non-default TimestampScale inside nested Info', () {
+      final info = createWebmInfoElement(
+        durationMs: 90000,
+        timestampScale: 2000000,
+        durationFirst: true,
+      );
+      final segment = Uint8List.fromList([
+        0x18, 0x53, 0x80, 0x67, 0xFF, ...info,
+      ]);
+      expect(WebmParser.parse(segment)!.durationSeconds, closeTo(180, 0.01));
+    });
+
+    test('Unknown-size integer element does not read outside its payload', () {
+      expect(WebmParser.parse(Uint8List.fromList([
+        0x2A, 0xD7, 0xB1, 0xFF, 0, 0, 0,
+      ])), isNull);
+    });
     test('Correctly parses WebM Info element with Duration and TimestampScale', () {
       final info = createWebmInfoElement(durationMs: 240000.0, timestampScale: 1000000);
       final result = WebmParser.parse(info);

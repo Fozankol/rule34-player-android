@@ -156,5 +156,77 @@ void main() {
       p1.duration = 3665.0; // 1 hour, 1 minute, 5 seconds
       expect(p1.formattedDuration, equals('01:01:05'));
     });
+
+    test('getMediaHeaders sets Referer for Gelbooru and Realbooru', () {
+      final gelbooruHeaders = getMediaHeaders('https://img4.gelbooru.com/images/12/34/example.mp4');
+      expect(gelbooruHeaders['Referer'], equals('https://gelbooru.com/'));
+
+      final realbooruHeaders = getMediaHeaders('https://realbooru.com/images/56/78/example.webm');
+      expect(realbooruHeaders['Referer'], equals('https://realbooru.com/'));
+
+      final r34Headers = getMediaHeaders('https://wimg.rule34.xxx/images/1/2/3.mp4');
+      expect(r34Headers['Referer'], isNull);
+
+      expect(getMediaReferer('https://img4.gelbooru.com/test.jpg'), equals('https://gelbooru.com/'));
+      expect(getMediaReferer('https://realbooru.com/test.mp4'), equals('https://realbooru.com/'));
+      expect(getMediaReferer('https://tbib.org/test.jpg'), isNull);
+    });
+
+    test('PostModel.fromJson uses img4.gelbooru.com fallback domain', () {
+      final post = PostModel.fromJson({
+        'id': 12345,
+        'score': 100,
+        'image': 'test.jpg',
+        'directory': 'ab/cd',
+        'tags': 'tag1 tag2',
+      }, source: 'gelbooru');
+
+      expect(post.fileUrl, equals('https://img4.gelbooru.com/images/ab/cd/test.jpg'));
+      expect(post.previewUrl, equals('https://img4.gelbooru.com/thumbnails/ab/cd/thumbnail_test.jpg'));
+    });
+
+    test('Score filter accepts posts with score >= minScore and rejects posts with lower score', () {
+      final filter = FilterOptions(minScore: 500);
+
+      final matchingPost = PostModel(
+        id: 1,
+        score: 500,
+        fileUrl: 'https://example.com/a.mp4',
+        previewUrl: '',
+        sampleUrl: '',
+        tags: ['video'],
+        width: 1280,
+        height: 720,
+        duration: 200,
+      );
+
+      final higherPost = PostModel(
+        id: 2,
+        score: 750,
+        fileUrl: 'https://example.com/b.mp4',
+        previewUrl: '',
+        sampleUrl: '',
+        tags: ['video'],
+        width: 1280,
+        height: 720,
+        duration: 200,
+      );
+
+      final lowerPost = PostModel(
+        id: 3,
+        score: 499,
+        fileUrl: 'https://example.com/c.mp4',
+        previewUrl: '',
+        sampleUrl: '',
+        tags: ['video'],
+        width: 1280,
+        height: 720,
+        duration: 200,
+      );
+
+      expect(filter.matches(matchingPost), isTrue);
+      expect(filter.matches(higherPost), isTrue);
+      expect(filter.matches(lowerPost), isFalse);
+    });
   });
 }

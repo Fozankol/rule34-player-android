@@ -5,6 +5,8 @@ import '../models/download_item.dart';
 import '../models/post_model.dart';
 import '../providers/downloads_provider.dart';
 import 'video_player_screen.dart';
+import '../theme/app_theme.dart';
+import '../l10n/app_strings.dart';
 
 class DownloadsScreen extends StatelessWidget {
   const DownloadsScreen({super.key});
@@ -14,12 +16,13 @@ class DownloadsScreen extends StatelessWidget {
     final dlProvider = context.watch<DownloadsProvider>();
     final downloads = dlProvider.downloads;
 
+    final tr = AppStrings.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF141419),
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1F1F28),
+        backgroundColor: AppTheme.background,
         title: Text(
-          'Загрузки (${downloads.length})',
+          '${tr.downloads} (${downloads.length})',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
@@ -27,17 +30,17 @@ class DownloadsScreen extends StatelessWidget {
           ? Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.download_for_offline_outlined,
+                children: [
+                  const Icon(Icons.download_for_offline_outlined,
                       size: 64, color: Colors.white24),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   Text(
-                    'Нет загруженных видео',
-                    style: TextStyle(color: Colors.white54, fontSize: 16),
+                    tr.noDownloadsYet,
+                    style: const TextStyle(color: Colors.white54, fontSize: 16),
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Скачивайте видео для оффлайн-просмотра',
+                    'Сохраняйте файлы для просмотра без сети',
                     style: TextStyle(color: Colors.white30, fontSize: 13),
                   ),
                 ],
@@ -77,12 +80,12 @@ class DownloadsScreen extends StatelessWidget {
               : isDownloading
                   ? Icons.downloading
                   : Icons.file_download_off,
-          color: isCompleted ? Colors.greenAccent : Colors.white70,
+          color: isCompleted ? AppTheme.accent : AppTheme.muted,
           size: 28,
         ),
       ),
       title: Text(
-        'Video #${item.postId}',
+        'Файл #${item.postId}',
         style: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.bold,
@@ -102,7 +105,7 @@ class DownloadsScreen extends StatelessWidget {
             LinearProgressIndicator(
               value: item.progress > 0 ? item.progress : null,
               backgroundColor: Colors.white12,
-              color: Colors.greenAccent,
+              color: AppTheme.accent,
             ),
           ],
           if (item.status == DownloadStatus.failed && item.errorMessage != null)
@@ -149,6 +152,7 @@ class DownloadsScreen extends StatelessWidget {
               builder: (_) => VideoPlayerScreen(
                 posts: [localPost],
                 initialIndex: 0,
+                isFromFeed: false,
               ),
             ),
           );

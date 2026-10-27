@@ -8,12 +8,17 @@ import 'providers/settings_provider.dart';
 import 'screens/home_screen.dart';
 import 'services/database_service.dart';
 import 'services/sqflite_storage.dart';
+import 'services/settings_service.dart';
+import 'services/api_service.dart';
+import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize SQLite storage for mobile persistence
   DatabaseService.setStorage(SqfliteDatabaseStorage());
+  final settings = await SettingsService().loadSettings();
+  ApiService().updateSettings(settings);
 
   // Set system UI style (dark navigation & status bars)
   SystemChrome.setSystemUIOverlayStyle(
@@ -43,31 +48,7 @@ class Rule34VideoApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Rule34 Video Player',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          brightness: Brightness.dark,
-          scaffoldBackgroundColor: const Color(0xFF121217),
-          primaryColor: const Color(0xFF00C853),
-          colorScheme: ColorScheme.dark(
-            primary: const Color(0xFF00C853),
-            secondary: const Color(0xFF6200EA),
-            surface: const Color(0xFF1B1B22),
-            background: const Color(0xFF121217),
-          ),
-          appBarTheme: const AppBarTheme(
-            backgroundColor: Color(0xFF1B1B22),
-            foregroundColor: Colors.white,
-            elevation: 0,
-            centerTitle: false,
-          ),
-          chipTheme: ChipThemeData(
-            backgroundColor: const Color(0xFF282834),
-            labelStyle: const TextStyle(color: Colors.white),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
+        theme: AppTheme.dark,
         home: const HomeScreen(),
       ),
     );

@@ -5,12 +5,14 @@ import '../services/api_service.dart';
 import '../services/metadata_prober.dart';
 import '../services/database_service.dart';
 import '../services/settings_service.dart';
+import '../services/realbooru_service.dart';
 
 class FeedProvider extends ChangeNotifier {
   final ApiService _apiService = ApiService();
   final MetadataProber _prober = MetadataProber();
   final DatabaseService _dbService = DatabaseService();
   final SettingsService _settingsService = SettingsService();
+  final RealbooruService _realbooruService = RealbooruService();
 
   final List<PostModel> _allPosts = [];
   List<PostModel> _filteredPosts = [];
@@ -24,6 +26,9 @@ class FeedProvider extends ChangeNotifier {
   int _currentPage = 0;
   bool _hasMore = true;
   int _sessionId = 0;
+  bool _disposed = false;
+
+  bool _isActive(int session) => !_disposed && session == _sessionId;
 
   List<PostModel> get posts => _filteredPosts;
   List<PostModel> get allPosts => _allPosts;
@@ -66,14 +71,16 @@ class FeedProvider extends ChangeNotifier {
 
   /// Initial load with deep auto-pagination to gather a healthy batch of matching posts
   Future<void> loadInitial() async {
+    if (_disposed) return;
     final currentSession = ++_sessionId;
     _isLoading = true;
+    _isLoadingMore = false;
     _errorMessage = null;
     _currentPage = 0;
     _hasMore = true;
     _allPosts.clear();
     _filteredPosts.clear();
-    _isDeepScanning = false;
+    _isDeepScanning = true;
     _deepScanStatus = '';
     notifyListeners();
 
@@ -83,7 +90,7 @@ class FeedProvider extends ChangeNotifier {
       const int maxInitialPages = 8;
 
       while (_hasMore && _filteredPosts.length < targetInitialMatches && pagesScanned < maxInitialPages) {
-        if (currentSession != _sessionId) return;
+        if (!_isActive(currentSession)) return;
 
         if (pagesScanned > 0) {
           _isDeepScanning = true;
@@ -97,7 +104,7 @@ class FeedProvider extends ChangeNotifier {
           filterOptions: _filterOptions,
         );
 
-        if (currentSession != _sessionId) return;
+        if (!_isActive(currentSession)) return;
 
         if (fetched.isEmpty) {
           _hasMore = false;
@@ -105,12 +112,14 @@ class FeedProvider extends ChangeNotifier {
         }
 
         _allPosts.addAll(fetched);
+        _startRealbooruScoreEnrichment(fetched, currentSession);
 
         // Pre-populate durations from SQLite cache in batch
         final ids = fetched.map((p) => p.id).toList();
         final cachedMap = await _dbService.getMetadataBatch(ids);
+        if (!_isActive(currentSession)) return;
         for (final post in fetched) {
-          if (cachedMap.containsKey(post.id)) {
+          if (cachedMap[post.id]?.fileUrl == post.fileUrl) {
             post.duration = cachedMap[post.id]!.durationSeconds;
           }
         }
@@ -132,7 +141,7 @@ class FeedProvider extends ChangeNotifier {
             concurrency: 6,
             dbService: _dbService,
             onProbed: (p) {
-              if (currentSession == _sessionId) {
+              if (_isActive(currentSession)) {
                 _recalculateFilteredPosts();
                 notifyListeners();
               }
@@ -140,22 +149,23 @@ class FeedProvider extends ChangeNotifier {
           );
         } else {
           // Probing can happen in background
-          _startProbing(fetched);
+          _startProbing(fetched, currentSession);
         }
 
+        if (!_isActive(currentSession)) return;
         pagesScanned++;
+        _currentPage++;
         if (_filteredPosts.length >= targetInitialMatches) {
           break;
         }
 
-        _currentPage++;
       }
     } catch (e) {
-      if (currentSession == _sessionId) {
+      if (_isActive(currentSession)) {
         _errorMessage = e.toString();
       }
     } finally {
-      if (currentSession == _sessionId) {
+      if (_isActive(currentSession)) {
         _isLoading = false;
         _isDeepScanning = false;
         _deepScanStatus = '';
@@ -166,10 +176,11 @@ class FeedProvider extends ChangeNotifier {
 
   /// Deep pagination for loadMore: scans pages in background until at least 15 new matches are found
   Future<void> loadMore() async {
-    if (_isLoading || _isLoadingMore || !_hasMore) return;
+    if (_disposed || _isLoading || _isLoadingMore || _isDeepScanning || !_hasMore) return;
 
     final currentSession = _sessionId;
     _isLoadingMore = true;
+    _errorMessage = null;
     _isDeepScanning = true;
     final initialCount = _filteredPosts.length;
     final targetTotal = initialCount + 15;
@@ -181,9 +192,8 @@ class FeedProvider extends ChangeNotifier {
 
     try {
       while (_hasMore && _filteredPosts.length < targetTotal && pagesScanned < maxPages) {
-        if (currentSession != _sessionId) return;
+        if (!_isActive(currentSession)) return;
 
-        _currentPage++;
         _deepScanStatus = 'Поиск видео... Найдено ${_filteredPosts.length} (стр. ${_currentPage + 1})';
         notifyListeners();
 
@@ -193,7 +203,7 @@ class FeedProvider extends ChangeNotifier {
           filterOptions: _filterOptions,
         );
 
-        if (currentSession != _sessionId) return;
+        if (!_isActive(currentSession)) return;
 
         if (fetched.isEmpty) {
           _hasMore = false;
@@ -201,12 +211,14 @@ class FeedProvider extends ChangeNotifier {
         }
 
         _allPosts.addAll(fetched);
+        _startRealbooruScoreEnrichment(fetched, currentSession);
 
         // Pre-populate durations from DB cache
         final ids = fetched.map((p) => p.id).toList();
         final cachedMap = await _dbService.getMetadataBatch(ids);
+        if (!_isActive(currentSession)) return;
         for (final post in fetched) {
-          if (cachedMap.containsKey(post.id)) {
+          if (cachedMap[post.id]?.fileUrl == post.fileUrl) {
             post.duration = cachedMap[post.id]!.durationSeconds;
           }
         }
@@ -223,22 +235,24 @@ class FeedProvider extends ChangeNotifier {
             concurrency: 6,
             dbService: _dbService,
             onProbed: (p) {
-              if (currentSession == _sessionId) {
+              if (_isActive(currentSession)) {
                 _recalculateFilteredPosts();
                 notifyListeners();
               }
             },
           );
         } else {
-          _startProbing(fetched);
+          _startProbing(fetched, currentSession);
         }
 
+        if (!_isActive(currentSession)) return;
         pagesScanned++;
+        _currentPage++;
       }
     } catch (e) {
-      _currentPage = (_currentPage - 1).clamp(0, 9999);
+      if (_isActive(currentSession)) _errorMessage = e.toString();
     } finally {
-      if (currentSession == _sessionId) {
+      if (_isActive(currentSession)) {
         _isLoadingMore = false;
         _isDeepScanning = false;
         _deepScanStatus = '';
@@ -251,12 +265,13 @@ class FeedProvider extends ChangeNotifier {
     await loadInitial();
   }
 
-  void _startProbing(List<PostModel> posts) {
+  void _startProbing(List<PostModel> posts, int session) {
     _prober.probeBatch(
       posts,
       concurrency: 4,
       dbService: _dbService,
       onProbed: (probedPost) {
+        if (!_isActive(session)) return;
         final index = _allPosts.indexWhere((p) => p.id == probedPost.id);
         if (index != -1) {
           _allPosts[index].duration = probedPost.duration;
@@ -264,7 +279,47 @@ class FeedProvider extends ChangeNotifier {
           notifyListeners();
         }
       },
-    );
+    ).catchError((Object error) {
+      if (_isActive(session)) {
+        _errorMessage = error.toString();
+        notifyListeners();
+      }
+    });
+  }
+
+  void _startRealbooruScoreEnrichment(List<PostModel> posts, int session) {
+    final targets = posts.where((p) => p.fileUrl.contains('realbooru.com') && !p.hasExactScore).toList();
+    if (targets.isEmpty) return;
+
+    Future.microtask(() async {
+      for (final post in targets) {
+        if (!_isActive(session)) break;
+        try {
+          final detailed = await _realbooruService.getDetails(post);
+          if (!_isActive(session)) break;
+          final idx = _allPosts.indexWhere((p) => p.id == post.id);
+          if (idx != -1) {
+            _allPosts[idx].score = detailed.score;
+            _allPosts[idx].hasExactScore = true;
+            if (detailed.tags.isNotEmpty) _allPosts[idx].tags = detailed.tags;
+            if (detailed.fileUrl != _allPosts[idx].fileUrl) {
+              _allPosts[idx].fileUrl = detailed.fileUrl;
+            }
+            _recalculateFilteredPosts();
+            notifyListeners();
+          }
+        } catch (_) {}
+      }
+    });
+  }
+
+  void notifyPostUpdated(PostModel post) {
+    final idx = _allPosts.indexWhere((p) => p.id == post.id);
+    if (idx != -1) {
+      _allPosts[idx] = post;
+      _recalculateFilteredPosts();
+      notifyListeners();
+    }
   }
 
   void setContentType(ContentTypeFilter type) {
@@ -291,6 +346,7 @@ class FeedProvider extends ChangeNotifier {
 
   void setCustomDurationRange(double minSeconds, double? maxSeconds) {
     _filterOptions.preset = DurationFilterPreset.custom;
+    _filterOptions.includeUnknownDuration = false;
     _filterOptions.minDurationSeconds = minSeconds;
     _filterOptions.maxDurationSeconds = maxSeconds;
     _recalculateFilteredPosts();
@@ -345,11 +401,22 @@ class FeedProvider extends ChangeNotifier {
         return durB.compareTo(durA);
       });
     } else if (_filterOptions.sortOption == SortOption.score) {
-      list.sort((a, b) => b.score.compareTo(a.score));
+      list.sort((a, b) {
+        final scoreCmp = b.score.compareTo(a.score);
+        if (scoreCmp != 0) return scoreCmp;
+        return b.id.compareTo(a.id);
+      });
     } else {
       list.sort((a, b) => b.id.compareTo(a.id));
     }
 
     _filteredPosts = list;
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _sessionId++;
+    super.dispose();
   }
 }

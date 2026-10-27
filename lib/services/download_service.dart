@@ -71,11 +71,10 @@ class DownloadService {
       post.fileUrl,
       savePath,
       cancelToken: cancelToken,
-      options: Options(headers: {
-        'User-Agent': 'Rule34VideoPlayer/1.0 (Android Downloader)',
-        if (post.fileUrl.contains('realbooru.com'))
-          'Referer': 'https://realbooru.com/',
-      }),
+      options: Options(headers: getMediaHeaders(
+        post.fileUrl,
+        userAgent: 'Rule34VideoPlayer/1.0 (Android Downloader)',
+      )),
       onReceiveProgress: (received, total) {
         item.downloadedBytes = received;
         item.totalBytes = total;

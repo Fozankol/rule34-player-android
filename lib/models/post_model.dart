@@ -1,10 +1,35 @@
+Map<String, String> getMediaHeaders(String url, {String? userAgent}) {
+  final headers = <String, String>{};
+  if (userAgent != null) {
+    headers['User-Agent'] = userAgent;
+  }
+  final lower = url.toLowerCase();
+  if (lower.contains('realbooru.com')) {
+    headers['Referer'] = 'https://realbooru.com/';
+  } else if (lower.contains('gelbooru.com')) {
+    headers['Referer'] = 'https://gelbooru.com/';
+  }
+  return headers;
+}
+
+String? getMediaReferer(String url) {
+  final lower = url.toLowerCase();
+  if (lower.contains('realbooru.com')) {
+    return 'https://realbooru.com/';
+  } else if (lower.contains('gelbooru.com')) {
+    return 'https://gelbooru.com/';
+  }
+  return null;
+}
+
 class PostModel {
   final int id;
-  final int score;
-  final String fileUrl;
-  final String previewUrl;
-  final String sampleUrl;
-  final List<String> tags;
+  int score;
+  bool hasExactScore;
+  String fileUrl;
+  String previewUrl;
+  String sampleUrl;
+  List<String> tags;
   final int width;
   final int height;
   final String createdAt;
@@ -17,6 +42,7 @@ class PostModel {
   PostModel({
     required this.id,
     required this.score,
+    this.hasExactScore = true,
     required this.fileUrl,
     required this.previewUrl,
     required this.sampleUrl,
@@ -119,7 +145,9 @@ class PostModel {
     final directory = (json['directory'] ?? '').toString();
 
     if (fileUrl.isEmpty && image.isNotEmpty) {
-      final domain = source == 'tbib'
+      final domain = source == 'gelbooru'
+          ? 'https://img4.gelbooru.com'
+          : source == 'tbib'
           ? 'https://tbib.org'
           : source == 'safebooru'
               ? 'https://safebooru.org'
@@ -141,6 +169,9 @@ class PostModel {
     return PostModel(
       id: parseId,
       score: parseScore,
+      hasExactScore: json['has_exact_score'] != null
+          ? (json['has_exact_score'] == true || json['has_exact_score'] == 1)
+          : (source != 'realbooru'),
       fileUrl: fileUrl,
       previewUrl: previewUrl,
       sampleUrl: sampleUrl,
@@ -159,6 +190,7 @@ class PostModel {
     return {
       'id': id,
       'score': score,
+      'has_exact_score': hasExactScore ? 1 : 0,
       'file_url': fileUrl,
       'preview_url': previewUrl,
       'sample_url': sampleUrl,
@@ -176,6 +208,7 @@ class PostModel {
   PostModel copyWith({
     int? id,
     int? score,
+    bool? hasExactScore,
     String? fileUrl,
     String? previewUrl,
     String? sampleUrl,
@@ -192,6 +225,7 @@ class PostModel {
     return PostModel(
       id: id ?? this.id,
       score: score ?? this.score,
+      hasExactScore: hasExactScore ?? this.hasExactScore,
       fileUrl: fileUrl ?? this.fileUrl,
       previewUrl: previewUrl ?? this.previewUrl,
       sampleUrl: sampleUrl ?? this.sampleUrl,

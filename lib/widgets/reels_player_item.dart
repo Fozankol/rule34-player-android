@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
@@ -6,6 +7,10 @@ import '../models/post_model.dart';
 import '../models/download_item.dart';
 import '../providers/favorites_provider.dart';
 import '../providers/downloads_provider.dart';
+import '../theme/app_theme.dart';
+import '../services/playback_session.dart';
+import '../services/realbooru_service.dart';
+import '../l10n/app_strings.dart';
 import 'speed_selector_dialog.dart';
 
 class ReelsPlayerItem extends StatefulWidget {
@@ -13,560 +18,373 @@ class ReelsPlayerItem extends StatefulWidget {
   final bool isCurrent;
   final bool isPreload;
   final Function(String tag)? onTagSelected;
+  final VoidCallback? onBack;
+  final VoidCallback? onNext;
+  final String? pageLabel;
 
-  const ReelsPlayerItem({
-    super.key,
-    required this.post,
-    required this.isCurrent,
-    this.isPreload = false,
-    this.onTagSelected,
-  });
+  const ReelsPlayerItem({super.key, required this.post, required this.isCurrent,
+    this.isPreload = false, this.onTagSelected, this.onBack, this.onNext, this.pageLabel});
 
   @override
   State<ReelsPlayerItem> createState() => _ReelsPlayerItemState();
 }
 
-class _ReelsPlayerItemState extends State<ReelsPlayerItem> {
+class _ReelsPlayerItemState extends State<ReelsPlayerItem> with WidgetsBindingObserver {
   VideoPlayerController? _controller;
   bool _isInitialized = false;
-  bool _hasError = false;
-  String _errorMessage = '';
-  double _playbackSpeed = 1.0;
-  bool _isMuted = false;
-  bool _showPlayPauseRipple = false;
-  bool _isPlaying = true;
+  String? _error;
+  double _speed = 1;
+  bool _muted = false;
+  bool _resumeAfterBackground = false;
+  bool _controlsVisible = true;
+  Timer? _hideTimer;
+  int _generation = 0;
+  bool _codecRecoveryUsed = false;
+  bool _wasPlaying = false;
+  Duration _lastPosition = Duration.zero;
+  int _openDialogs = 0;
+
+  void _scheduleHide() {
+    _hideTimer?.cancel();
+    if (!widget.isCurrent || _error != null || !_isInitialized ||
+        !(_controller?.value.isPlaying ?? false) || _openDialogs > 0) return;
+    _hideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _controlsVisible = false);
+    });
+  }
+
+  void _toggleControls() {
+    setState(() => _controlsVisible = !_controlsVisible);
+    _scheduleHide();
+  }
+
+  bool _isCodecError(String message) => RegExp('codec|decoder|VideoRenderer', caseSensitive: false).hasMatch(message);
 
   @override
   void initState() {
     super.initState();
-    if (widget.isCurrent || widget.isPreload) {
-      _initPlayer();
-    }
+    WidgetsBinding.instance.addObserver(this);
+    if (widget.isCurrent) _initPlayer();
   }
 
-  void _disposeCurrentController() {
-    _controller?.removeListener(_playerListener);
-    _controller?.dispose();
+  void _release() {
+    _generation++;
+    _hideTimer?.cancel();
+    final controller = _controller;
     _controller = null;
+    _isInitialized = false;
+    controller?.removeListener(_listen);
+    if (controller != null) {
+      PlaybackSession.instance.release(controller).catchError((Object _) {});
+    }
   }
 
   @override
   void didUpdateWidget(covariant ReelsPlayerItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.post.id != oldWidget.post.id) {
-      _disposeCurrentController();
-      _isInitialized = false;
-      _hasError = false;
-      _errorMessage = '';
-      if (widget.isCurrent || widget.isPreload) {
-        _initPlayer();
-      }
-    } else if (widget.isCurrent && !oldWidget.isCurrent) {
-      if (_controller == null) {
-        _initPlayer();
-      } else {
-        _controller?.play();
-        setState(() {
-          _isPlaying = true;
-        });
-      }
-    } else if (!widget.isCurrent && oldWidget.isCurrent) {
-      _controller?.pause();
-      setState(() {
-        _isPlaying = false;
-      });
-    } else if (!widget.isCurrent && !widget.isPreload && (oldWidget.isCurrent || oldWidget.isPreload)) {
-      // Discard controller when page scrolls out of preload range to preserve RAM/decoders
-      _disposeCurrentController();
-      setState(() {
-        _isInitialized = false;
-      });
-    } else if (!widget.isCurrent && widget.isPreload && _controller == null) {
+    if (widget.post.fileUrl != oldWidget.post.fileUrl) {
+      _codecRecoveryUsed = false;
+      _lastPosition = Duration.zero;
+      _release();
+    }
+    if (!widget.isCurrent) {
+      _release();
+    } else if (!oldWidget.isCurrent || widget.post.fileUrl != oldWidget.post.fileUrl) {
+      _codecRecoveryUsed = false;
+      _controlsVisible = true;
       _initPlayer();
     }
   }
 
-  Future<void> _initPlayer() async {
-    _disposeCurrentController();
-    try {
-      if (widget.post.localFilePath != null &&
-          File(widget.post.localFilePath!).existsSync()) {
-        _controller = VideoPlayerController.file(File(widget.post.localFilePath!));
-      } else {
-        final headers = <String, String>{
-          'User-Agent': 'Rule34VideoPlayer/1.0',
-        };
-        if (widget.post.fileUrl.contains('realbooru.com')) {
-          headers['Referer'] = 'https://realbooru.com/';
-        }
-
-        _controller = VideoPlayerController.networkUrl(
-          Uri.parse(widget.post.fileUrl),
-          httpHeaders: headers,
-        );
-      }
-
-      await _controller!.initialize();
-      _controller!.setLooping(true);
-      _controller!.setPlaybackSpeed(_playbackSpeed);
-      _controller!.setVolume(_isMuted ? 0.0 : 1.0);
-
-      if (widget.isCurrent) {
-        await _controller!.play();
-      } else {
-        await _controller!.pause();
-      }
-
-      if (mounted) {
-        setState(() {
-          _isInitialized = true;
-          _isPlaying = _controller!.value.isPlaying;
-        });
-      }
-
-      _controller!.addListener(_playerListener);
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _hasError = true;
-          _errorMessage = e.toString();
-        });
-      }
-    }
-  }
-
-  void _playerListener() {
-    if (!mounted || _controller == null) return;
-    if (_isPlaying != _controller!.value.isPlaying) {
-      setState(() {
-        _isPlaying = _controller!.value.isPlaying;
-      });
-    }
-  }
-
-  void _togglePlayPause() {
-    if (_controller == null || !_isInitialized) return;
-
-    if (_controller!.value.isPlaying) {
-      _controller!.pause();
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_resumeAfterBackground && widget.isCurrent) _controller?.play();
+      _resumeAfterBackground = false;
     } else {
-      _controller!.play();
+      _resumeAfterBackground = _resumeAfterBackground || (_controller?.value.isPlaying ?? false);
+      _controller?.pause();
     }
+  }
 
-    setState(() {
-      _showPlayPauseRipple = true;
-    });
-
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (mounted) {
-        setState(() {
-          _showPlayPauseRipple = false;
-        });
+  Future<void> _initPlayer({bool recovering = false}) async {
+    _release();
+    final generation = _generation;
+    _error = null;
+    _controlsVisible = true;
+    VideoPlayerController? controller;
+    try {
+      final local = widget.post.localFilePath;
+      final headers = getMediaHeaders(widget.post.fileUrl, userAgent: 'Rule34VideoPlayer/1.0');
+      controller = await PlaybackSession.instance.open(() => local != null && File(local).existsSync()
+          ? VideoPlayerController.file(File(local))
+          : VideoPlayerController.networkUrl(Uri.parse(widget.post.fileUrl), httpHeaders: headers),
+          isCurrent: () => mounted && widget.isCurrent && generation == _generation);
+      if (controller == null || !mounted || generation != _generation) return;
+      _controller = controller;
+      if (!mounted || _controller != controller) return;
+      await controller.setLooping(true);
+      if (!mounted || _controller != controller) return;
+      await controller.setPlaybackSpeed(_speed);
+      if (!mounted || _controller != controller) return;
+      await controller.setVolume(_muted ? 0 : 1);
+      if (!mounted || _controller != controller) return;
+      if (recovering && _lastPosition > Duration.zero) {
+        await controller.seekTo(_lastPosition);
+        if (!mounted || _controller != controller) return;
       }
-    });
+      if (widget.isCurrent && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        await controller.play();
+      }
+      if (!mounted || _controller != controller) return;
+      controller.addListener(_listen);
+      setState(() => _isInitialized = true);
+      _wasPlaying = controller.value.isPlaying;
+      _scheduleHide();
+
+      if (widget.post.fileUrl.contains('realbooru.com')) {
+        RealbooruService().getDetails(widget.post).then((detailed) {
+          if (mounted && generation == _generation) {
+            widget.post.score = detailed.score;
+            widget.post.hasExactScore = true;
+            if (detailed.tags.isNotEmpty) {
+              widget.post.tags = detailed.tags;
+            }
+            if (mounted) setState(() {});
+          }
+        }).catchError((_) {});
+      }
+    } catch (e) {
+      if (mounted && generation == _generation && widget.isCurrent) {
+        _handleError(e.toString());
+      }
+    }
   }
 
-  void _seekRelative(int seconds) {
-    if (_controller == null || !_isInitialized) return;
-    final current = _controller!.value.position;
-    final target = current + Duration(seconds: seconds);
-    _controller!.seekTo(target);
+  void _listen() {
+    if (!mounted) return;
+    final value = _controller?.value;
+    if (value?.hasError ?? false) {
+      final description = value!.errorDescription ?? 'Ошибка воспроизведения';
+      _handleError(description);
+    } else if (value != null) {
+      _lastPosition = value.position;
+      if (_wasPlaying != value.isPlaying) {
+        _wasPlaying = value.isPlaying;
+        if (!value.isPlaying) setState(() => _controlsVisible = true);
+        _scheduleHide();
+      }
+    }
   }
 
-  void _showTagListModal() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E1E28),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  void _handleError(String error) {
+    _release();
+    if (_isCodecError(error) && !_codecRecoveryUsed && widget.isCurrent) {
+      _codecRecoveryUsed = true;
+      setState(() => _error = null);
+      _initPlayer(recovering: true);
+    } else {
+      setState(() { _error = error; _controlsVisible = true; });
+    }
+  }
+
+  void _toggle() {
+    final controller = _controller;
+    if (!_isInitialized || controller == null) return;
+    controller.value.isPlaying ? controller.pause() : controller.play();
+  }
+
+  void _seek(int seconds) {
+    _scheduleHide();
+    final controller = _controller;
+    if (!_isInitialized || controller == null) return;
+    final target = (controller.value.position.inMilliseconds + seconds * 1000)
+        .clamp(0, controller.value.duration.inMilliseconds);
+    controller.seekTo(Duration(milliseconds: target));
+  }
+
+  String _time(Duration value) {
+    final seconds = value.inSeconds;
+    final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
+    return '$minutes:${(seconds % 60).toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _tags() async {
+    _hideTimer?.cancel();
+    _openDialogs++;
+    await showModalBottomSheet<void>(
+      context: context, backgroundColor: AppTheme.surface, isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(sheetContext).size.height * .55,
+          child: Column(children: [
+            ListTile(title: Text('${AppStrings.of(context).tags} · ${widget.post.tags.length}'),
+              trailing: IconButton(tooltip: AppStrings.of(context).close, icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(sheetContext))),
+            Expanded(child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              child: Wrap(spacing: 8, runSpacing: 8, children: widget.post.tags.map((tag) => ActionChip(
+                label: Text(tag), onPressed: () {
+                  Navigator.pop(sheetContext);
+                  widget.onTagSelected?.call(tag);
+                },
+              )).toList()))),
+          ]),
+        ),
       ),
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Теги (${widget.post.tags.length})',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: widget.post.tags.map((tag) {
-                      return ActionChip(
-                        backgroundColor: const Color(0xFF2C2C38),
-                        label: Text(
-                          tag,
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                        ),
-                        onPressed: () {
-                          Navigator.pop(context);
-                          widget.onTagSelected?.call(tag);
-                        },
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
+    _openDialogs--;
+    if (mounted) _scheduleHide();
+  }
+
+  void _showDetails() {
+    final tr = AppStrings.of(context);
+    showDialog<void>(context: context, builder: (ctx) => AlertDialog(
+      title: Text(tr.errorDetails),
+      content: SingleChildScrollView(child: SelectableText(_error ?? '')),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr.close))],
+    ));
+  }
+
+  Widget _errorView() {
+    final tr = AppStrings.of(context);
+    final codec = _isCodecError(_error ?? '');
+    return Center(child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(28, 88, 28, 24),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(codec ? Icons.video_settings_rounded : Icons.wifi_off_rounded, size: 44, color: AppTheme.error),
+        const SizedBox(height: 18),
+        Text(codec ? tr.failedToPlay : tr.failedToLoad, textAlign: TextAlign.center,
+          style: const TextStyle(color: AppTheme.text, fontSize: 23, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 10),
+        Text(codec ? tr.codecErrorText : tr.networkErrorText,
+          textAlign: TextAlign.center, style: const TextStyle(color: AppTheme.muted, height: 1.5, fontSize: 14)),
+        const SizedBox(height: 24),
+        ElevatedButton.icon(onPressed: () { setState(() => _error = null); _codecRecoveryUsed = false; _initPlayer(); },
+          icon: const Icon(Icons.refresh_rounded), label: Text(tr.retryLoading)),
+        const SizedBox(height: 4),
+        TextButton(onPressed: _showDetails, child: Text(tr.errorDetails)),
+        Wrap(alignment: WrapAlignment.center, spacing: 12, children: [
+          TextButton.icon(icon: const Icon(Icons.download_outlined), label: Text(tr.download),
+            onPressed: () => context.read<DownloadsProvider>().startDownload(widget.post)),
+          TextButton.icon(icon: const Icon(Icons.sell_outlined), label: Text(tr.tags), onPressed: _tags),
+        ]),
+      ]),
+    ));
+  }
+
+  Widget _action(IconData icon, String label, VoidCallback onTap, {Color color = AppTheme.text}) {
+    return Expanded(child: Tooltip(message: label, child: InkWell(
+      onTap: () { _scheduleHide(); onTap(); }, borderRadius: BorderRadius.circular(12),
+      child: Padding(padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 2),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: color, size: 24), const SizedBox(height: 6),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+            textScaler: TextScaler.linear(MediaQuery.textScalerOf(context).scale(1).clamp(1, 1.3)),
+            style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+        ])),
+    )));
+  }
+
+  Widget _transport(VideoPlayerController controller) => ValueListenableBuilder<VideoPlayerValue>(
+    valueListenable: controller,
+    builder: (context, value, _) => Column(children: [
+      Row(children: [
+        IconButton(tooltip: value.isPlaying ? 'Пауза' : 'Воспроизвести', onPressed: _toggle,
+          icon: Icon(value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded)),
+        Text(_time(value.position), style: const TextStyle(fontSize: 12, color: AppTheme.text)),
+        const Spacer(),
+        if (value.isBuffering) const Padding(padding: EdgeInsets.only(right: 12),
+          child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))),
+        Text(_time(value.duration), style: const TextStyle(fontSize: 12, color: AppTheme.muted)),
+      ]),
+      VideoProgressIndicator(controller, allowScrubbing: true,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        colors: const VideoProgressColors(playedColor: AppTheme.accent,
+          bufferedColor: AppTheme.muted, backgroundColor: AppTheme.raised)),
+    ]),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final tr = AppStrings.of(context);
+    final favorites = context.watch<FavoritesProvider>();
+    final downloads = context.watch<DownloadsProvider>();
+    final favorite = favorites.isFavorite(widget.post.id);
+    final saved = downloads.isDownloaded(widget.post.id);
+    final item = downloads.getItem(widget.post.id);
+    final downloading = item?.status == DownloadStatus.downloading;
+    final controller = _controller;
+
+    return ColoredBox(color: Colors.black, child: Stack(fit: StackFit.expand, children: [
+        if (_error != null) _errorView()
+        else if (_isInitialized && controller != null) ...[
+          Center(child: AspectRatio(aspectRatio: controller.value.aspectRatio, child: VideoPlayer(controller))),
+          Row(children: [
+            Expanded(child: GestureDetector(behavior: HitTestBehavior.translucent,
+              key: const ValueKey('video-left-gesture'),
+              onTap: _toggleControls, onDoubleTap: () => _seek(-10))),
+            Expanded(child: GestureDetector(behavior: HitTestBehavior.translucent,
+              onTap: _toggleControls, onDoubleTap: () => _seek(10))),
+          ]),
+        ] else Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(width: 30, height: 30, child: CircularProgressIndicator(strokeWidth: 2)),
+          const SizedBox(height: 16), Text(tr.loadingVideo, style: const TextStyle(color: AppTheme.muted)),
+        ])),
+      if (_controlsVisible) Positioned(
+        top: MediaQuery.of(context).padding.top + 8, left: 12, right: 12,
+        child: Row(children: [
+          IconButton(tooltip: tr.back, style: IconButton.styleFrom(backgroundColor: Colors.black54),
+            icon: const Icon(Icons.arrow_back_rounded), onPressed: widget.onBack ?? () => Navigator.maybePop(context)),
+          const Spacer(),
+          if (widget.pageLabel != null) Text(widget.pageLabel!, style: const TextStyle(color: Colors.white)),
+          const Spacer(),
+          if (_error == null && _isInitialized) IconButton(tooltip: tr.hideControls, style: IconButton.styleFrom(backgroundColor: Colors.black54),
+            icon: const Icon(Icons.visibility_off_outlined), onPressed: () {
+              setState(() => _controlsVisible = false); _hideTimer?.cancel();
+            }),
+          if (widget.onNext != null) IconButton(tooltip: tr.nextVideo,
+            icon: const Icon(Icons.skip_next_rounded), onPressed: widget.onNext),
+        ]),
+      ),
+      if (_controlsVisible && _error == null && _isInitialized) Positioned(left: 0, right: 0, bottom: 0,
+       child: Listener(onPointerDown: (_) => _hideTimer?.cancel(), onPointerUp: (_) => _scheduleHide(),
+        child: ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * .42),
+       child: SingleChildScrollView(child: ColoredBox(color: AppTheme.background, child: SafeArea(top: false, child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            const Icon(Icons.movie_outlined, size: 18, color: AppTheme.muted),
+            const SizedBox(width: 8),
+            Expanded(child: Text('Video #${widget.post.id}', maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
+            Text(widget.post.formattedDuration, style: const TextStyle(color: AppTheme.accent, fontSize: 13)),
+          ]),
+          if (_isInitialized && controller != null) _transport(controller) else const SizedBox(height: 8),
+          Row(children: [
+            _action(favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+              '${widget.post.score}', () => favorites.toggleFavorite(widget.post),
+              color: favorite ? AppTheme.error : AppTheme.text),
+            _action(saved ? Icons.download_done_rounded : downloading ? Icons.downloading_rounded : Icons.download_rounded,
+              saved ? tr.saved : downloading ? '${((item?.progress ?? 0) * 100).toInt()}%' : tr.download,
+              () { if (!saved && !downloading) downloads.startDownload(widget.post); }),
+            _action(Icons.speed_rounded, '${_speed}×', () => showDialog<void>(context: context,
+              builder: (_) => SpeedSelectorDialog(currentSpeed: _speed, onSpeedSelected: (speed) {
+                setState(() => _speed = speed); _controller?.setPlaybackSpeed(speed);
+              }))),
+            _action(_muted ? Icons.volume_off_rounded : Icons.volume_up_rounded, _muted ? tr.muted : tr.sound, () {
+              setState(() => _muted = !_muted); _controller?.setVolume(_muted ? 0 : 1);
+            }),
+            _action(Icons.sell_outlined, tr.tags, _tags),
+          ]),
+        ]),
+      ))))))),
+    ]));
   }
 
   @override
   void dispose() {
-    _disposeCurrentController();
+    _hideTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _release();
     super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final favProvider = context.watch<FavoritesProvider>();
-    final dlProvider = context.watch<DownloadsProvider>();
-    final isFav = favProvider.isFavorite(widget.post.id);
-    final isDl = dlProvider.isDownloaded(widget.post.id);
-    final dlItem = dlProvider.getItem(widget.post.id);
-
-    return Container(
-      color: Colors.black,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Video Layer
-          if (_isInitialized && _controller != null)
-            Center(
-              child: AspectRatio(
-                aspectRatio: _controller!.value.aspectRatio,
-                child: VideoPlayer(_controller!),
-              ),
-            )
-          else if (_hasError)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Не удалось загрузить видео',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _errorMessage,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white54, fontSize: 12),
-                      maxLines: 3,
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00C853),
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _hasError = false;
-                        });
-                        _initPlayer();
-                      },
-                      child: const Text('Повторить'),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            const Center(
-              child: CircularProgressIndicator(color: Colors.greenAccent),
-            ),
-
-          // Double tap seek zones & single tap play/pause
-          Positioned.fill(
-            child: Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onDoubleTap: () => _seekRelative(-10),
-                    onTap: _togglePlayPause,
-                  ),
-                ),
-                Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onDoubleTap: () => _seekRelative(10),
-                    onTap: _togglePlayPause,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Play/Pause center animated ripple
-          if (_showPlayPauseRipple)
-            Center(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(
-                  color: Colors.black54,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  _isPlaying ? Icons.play_arrow : Icons.pause,
-                  color: Colors.white,
-                  size: 48,
-                ),
-              ),
-            ),
-
-          // Right side action controls
-          Positioned(
-            right: 12,
-            bottom: 90,
-            child: Column(
-              children: [
-                // Favorite Button
-                _buildActionButton(
-                  icon: isFav ? Icons.favorite : Icons.favorite_border,
-                  color: isFav ? Colors.redAccent : Colors.white,
-                  label: '${widget.post.score}',
-                  onTap: () => favProvider.toggleFavorite(widget.post),
-                ),
-                const SizedBox(height: 16),
-
-                // Download Button
-                if (isDl)
-                  _buildActionButton(
-                    icon: Icons.download_done,
-                    color: Colors.greenAccent,
-                    label: 'Сохранено',
-                    onTap: () {},
-                  )
-                else if (dlItem?.status == DownloadStatus.downloading)
-                  Column(
-                    children: [
-                      SizedBox(
-                        width: 38,
-                        height: 38,
-                        child: CircularProgressIndicator(
-                          value: dlItem?.progress,
-                          color: Colors.greenAccent,
-                          backgroundColor: Colors.white24,
-                          strokeWidth: 3,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${((dlItem?.progress ?? 0) * 100).toInt()}%',
-                        style: const TextStyle(color: Colors.white, fontSize: 10),
-                      ),
-                    ],
-                  )
-                else
-                  _buildActionButton(
-                    icon: Icons.download_rounded,
-                    color: Colors.white,
-                    label: 'Скачать',
-                    onTap: () => dlProvider.startDownload(widget.post),
-                  ),
-                const SizedBox(height: 16),
-
-                // Speed Selector
-                _buildActionButton(
-                  icon: Icons.speed,
-                  color: Colors.white,
-                  label: '${_playbackSpeed}x',
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => SpeedSelectorDialog(
-                        currentSpeed: _playbackSpeed,
-                        onSpeedSelected: (newSpeed) {
-                          setState(() {
-                            _playbackSpeed = newSpeed;
-                            _controller?.setPlaybackSpeed(newSpeed);
-                          });
-                        },
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Mute / Unmute
-                _buildActionButton(
-                  icon: _isMuted ? Icons.volume_off : Icons.volume_up,
-                  color: Colors.white,
-                  label: _isMuted ? 'Выкл' : 'Звук',
-                  onTap: () {
-                    setState(() {
-                      _isMuted = !_isMuted;
-                      _controller?.setVolume(_isMuted ? 0.0 : 1.0);
-                    });
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Tags modal
-                _buildActionButton(
-                  icon: Icons.label_outline,
-                  color: Colors.white,
-                  label: 'Теги',
-                  onTap: _showTagListModal,
-                ),
-              ],
-            ),
-          ),
-
-          // Bottom info and seekbar overlay
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [Colors.black87, Colors.transparent],
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Post ID & Duration badge
-                  Row(
-                    children: [
-                      Text(
-                        'Post #${widget.post.id}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF00C853).withOpacity(0.8),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          widget.post.formattedDuration,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-
-                  // Tags horizontal preview
-                  if (widget.post.tags.isNotEmpty)
-                    SizedBox(
-                      height: 26,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: widget.post.tags.take(6).length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 6),
-                        itemBuilder: (context, idx) {
-                          final tag = widget.post.tags[idx];
-                          return GestureDetector(
-                            onTap: () => widget.onTagSelected?.call(tag),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: Colors.white12,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                '#$tag',
-                                style: const TextStyle(color: Colors.white70, fontSize: 11),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  const SizedBox(height: 8),
-
-                  // Video Scrubber / Progress Bar
-                  if (_isInitialized && _controller != null)
-                    VideoProgressIndicator(
-                      _controller!,
-                      allowScrubbing: true,
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      colors: const VideoProgressColors(
-                        playedColor: Color(0xFF00C853),
-                        bufferedColor: Colors.white24,
-                        backgroundColor: Colors.white10,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required Color color,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: const BoxDecoration(
-              color: Colors.black45,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 28),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

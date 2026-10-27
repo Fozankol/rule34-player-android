@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../models/post_model.dart';
@@ -14,7 +13,7 @@ class MetadataProber {
   MetadataProber._internal();
 
   final http.Client _client = http.Client();
-  final Set<int> _activeProbes = {};
+  final Set<String> _activeProbes = {};
 
   static const String _defaultUserAgent =
       'Rule34VideoPlayer/1.0 (Android; client-side duration prober)';
@@ -93,7 +92,7 @@ class MetadataProber {
 
     // 2. Check local SQLite cache
     final cached = await db.getMetadata(post.id);
-    if (cached != null && cached.durationSeconds > 0) {
+    if (cached != null && cached.fileUrl == post.fileUrl && cached.durationSeconds > 0) {
       post.duration = cached.durationSeconds;
       return cached.durationSeconds;
     }
@@ -103,11 +102,11 @@ class MetadataProber {
     }
 
     // Avoid duplicate requests for the same post ID
-    if (_activeProbes.contains(post.id)) {
+    if (_activeProbes.contains(post.fileUrl)) {
       return null;
     }
 
-    _activeProbes.add(post.id);
+    _activeProbes.add(post.fileUrl);
     post.isProbing = true;
 
     try {
@@ -118,8 +117,9 @@ class MetadataProber {
       final request = http.Request('GET', uri);
       request.headers['User-Agent'] = _defaultUserAgent;
       request.headers['Range'] = 'bytes=0-${_chunkSize - 1}';
-      if (post.fileUrl.contains('realbooru.com')) {
-        request.headers['Referer'] = 'https://realbooru.com/';
+      final referer = getMediaReferer(post.fileUrl);
+      if (referer != null) {
+        request.headers['Referer'] = referer;
       }
 
       final streamedResponse = await _client.send(request).timeout(
@@ -128,6 +128,7 @@ class MetadataProber {
 
       if (streamedResponse.statusCode != 200 &&
           streamedResponse.statusCode != 206) {
+        await streamedResponse.stream.listen(null).cancel();
         return null;
       }
 
@@ -177,8 +178,9 @@ class MetadataProber {
           final tailRequest = http.Request('GET', uri);
           tailRequest.headers['User-Agent'] = _defaultUserAgent;
           tailRequest.headers['Range'] = 'bytes=$tailStart-${totalFileSize - 1}';
-          if (post.fileUrl.contains('realbooru.com')) {
-            tailRequest.headers['Referer'] = 'https://realbooru.com/';
+          final tailReferer = getMediaReferer(post.fileUrl);
+          if (tailReferer != null) {
+            tailRequest.headers['Referer'] = tailReferer;
           }
 
           try {
@@ -199,7 +201,7 @@ class MetadataProber {
               }
             } else {
               // Server did not return partial content; cancel stream immediately
-              final _ = tailResponse.stream.listen(null)..cancel();
+              await tailResponse.stream.listen(null).cancel();
             }
           } catch (_) {}
         }
@@ -225,7 +227,7 @@ class MetadataProber {
       // Network error, timeout or range unsupported
     } finally {
       post.isProbing = false;
-      _activeProbes.remove(post.id);
+      _activeProbes.remove(post.fileUrl);
     }
 
     return null;
@@ -238,8 +240,11 @@ class MetadataProber {
     Function(PostModel)? onProbed,
     DatabaseService? dbService,
   }) async {
+    if (concurrency < 1) {
+      throw ArgumentError.value(concurrency, 'concurrency', 'Must be positive');
+    }
     final unprobed = posts
-        .where((p) => p.isVideo && p.duration == null && !_activeProbes.contains(p.id))
+        .where((p) => p.isVideo && p.duration == null && !_activeProbes.contains(p.fileUrl))
         .toList();
 
     if (unprobed.isEmpty) return;
@@ -252,7 +257,8 @@ class MetadataProber {
 
     final remaining = <PostModel>[];
     for (final post in unprobed) {
-      if (cachedMap.containsKey(post.id)) {
+      if (cachedMap[post.id]?.fileUrl == post.fileUrl &&
+          cachedMap[post.id]!.durationSeconds > 0) {
         post.duration = cachedMap[post.id]!.durationSeconds;
         onProbed?.call(post);
       } else {
@@ -263,32 +269,18 @@ class MetadataProber {
     if (remaining.isEmpty) return;
 
     // Concurrently process remaining items
-    int running = 0;
     int index = 0;
-    final completer = Completer<void>();
-
-    void next() {
-      if (index >= remaining.length && running == 0) {
-        if (!completer.isCompleted) completer.complete();
-        return;
-      }
-
-      while (running < concurrency && index < remaining.length) {
+    Future<void> worker() async {
+      while (index < remaining.length) {
         final currentPost = remaining[index++];
-        running++;
-        probeDuration(currentPost, dbService: db).then((dur) {
-          if (dur != null) {
-            onProbed?.call(currentPost);
-          }
-        }).whenComplete(() {
-          running--;
-          next();
-        });
+        final duration = await probeDuration(currentPost, dbService: db);
+        if (duration != null) onProbed?.call(currentPost);
       }
     }
-
-    next();
-    await completer.future;
+    await Future.wait(List.generate(
+      concurrency.clamp(1, remaining.length),
+      (_) => worker(),
+    ));
   }
 
   void dispose() {

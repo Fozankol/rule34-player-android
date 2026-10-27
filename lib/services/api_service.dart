@@ -24,9 +24,10 @@ class TagSuggestion {
 class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
-  ApiService._internal();
+  ApiService._internal() : _client = http.Client();
+  ApiService.withClient(http.Client client) : _client = client;
 
-  final http.Client _client = http.Client();
+  final http.Client _client;
   final RealbooruService _realbooruService = RealbooruService();
   AppSettings _settings = AppSettings();
 
@@ -39,6 +40,8 @@ class ApiService {
         return 'https://tbib.org/index.php';
       case 'safebooru':
         return 'https://safebooru.org/index.php';
+      case 'gelbooru':
+        return 'https://gelbooru.com/index.php';
       case 'rule34':
       default:
         return 'https://api.rule34.xxx/index.php';
@@ -96,6 +99,7 @@ class ApiService {
     int limit = 100,
     FilterOptions? filterOptions,
   }) async {
+    final source = _settings.booruSource;
     // If source is Realbooru, delegate to HTML scraper
     if (_settings.booruSource == 'realbooru') {
       return _realbooruService.fetchPosts(
@@ -165,6 +169,12 @@ class ApiService {
         queryParams['api_key'] = _settings.r34ApiKey.trim();
       }
     }
+    if (source == 'gelbooru') {
+      if (_settings.gelbooruUserId.trim().isNotEmpty && _settings.gelbooruApiKey.trim().isNotEmpty) {
+        queryParams['user_id'] = _settings.gelbooruUserId.trim();
+        queryParams['api_key'] = _settings.gelbooruApiKey.trim();
+      }
+    }
 
     final uri = Uri.parse(_baseUrl).replace(queryParameters: queryParams);
 
@@ -177,9 +187,11 @@ class ApiService {
     ).timeout(const Duration(seconds: 15));
 
     if (response.statusCode != 200) {
+      if (source == 'gelbooru' && (response.statusCode == 401 || response.statusCode == 403)) {
+        throw const HttpException('Gelbooru: доступ к API отклонён. Укажите User ID и API Key Gelbooru в Настройках (Account → Options).');
+      }
       throw HttpException(
         'Ошибка сервера: HTTP ${response.statusCode}',
-        uri: uri,
       );
     }
 
@@ -213,10 +225,13 @@ class ApiService {
 
     final List<PostModel> posts = [];
 
+    if (source == 'gelbooru' && decoded is Map<String, dynamic>) {
+      decoded = decoded['post'] ?? [];
+    }
     if (decoded is List) {
       for (final item in decoded) {
         if (item is Map<String, dynamic>) {
-          final post = PostModel.fromJson(item, source: _settings.booruSource);
+          final post = PostModel.fromJson(item, source: source);
           posts.add(post);
         }
       }
@@ -230,7 +245,9 @@ class ApiService {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return [];
 
-    final uri = Uri.parse('$_autocompleteUrl?q=${Uri.encodeComponent(trimmed)}');
+    final uri = _settings.booruSource == 'gelbooru'
+        ? Uri.https('gelbooru.com', '/index.php', {'page': 'autocomplete2', 'type': 'tag_query', 'term': trimmed})
+        : Uri.parse('$_autocompleteUrl?q=${Uri.encodeComponent(trimmed)}');
 
     try {
       final response = await _client.get(

@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../services/database_service.dart';
 import '../providers/feed_provider.dart';
+import '../theme/app_theme.dart';
+import '../l10n/app_strings.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -22,6 +24,7 @@ class _SearchScreenState extends State<SearchScreen> {
   List<String> _selectedTags = [];
   Timer? _debounceTimer;
   bool _isLoadingSuggestions = false;
+  int _suggestionRequest = 0;
 
   @override
   void initState() {
@@ -42,6 +45,11 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _onSearchChanged(String query) {
     _debounceTimer?.cancel();
+    final request = ++_suggestionRequest;
+    setState(() {
+      _suggestions = [];
+      _isLoadingSuggestions = false;
+    });
     if (query.trim().isEmpty) {
       setState(() {
         _suggestions = [];
@@ -56,7 +64,7 @@ class _SearchScreenState extends State<SearchScreen> {
       });
 
       final results = await _apiService.fetchAutocomplete(query);
-      if (mounted) {
+      if (mounted && request == _suggestionRequest) {
         setState(() {
           _suggestions = results;
           _isLoadingSuggestions = false;
@@ -68,10 +76,13 @@ class _SearchScreenState extends State<SearchScreen> {
   void _addTag(String tag) {
     final trimmed = tag.trim().toLowerCase();
     if (trimmed.isNotEmpty && !_selectedTags.contains(trimmed)) {
+      _debounceTimer?.cancel();
+      _suggestionRequest++;
       setState(() {
         _selectedTags.add(trimmed);
         _textController.clear();
         _suggestions = [];
+        _isLoadingSuggestions = false;
       });
     }
   }
@@ -83,6 +94,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _submitSearch() {
+    _addTag(_textController.text);
     final feed = context.read<FeedProvider>();
     feed.setSearchTags(_selectedTags);
     Navigator.pop(context);
@@ -98,16 +110,16 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF141419),
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1F1F28),
+        backgroundColor: AppTheme.background,
         elevation: 0,
         title: TextField(
           controller: _textController,
           autofocus: true,
           style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
-            hintText: 'Поиск тегов (напр. 3d, animation)...',
+            hintText: AppStrings.of(context).isRu ? 'Поиск тегов (напр. 3d, animation)...' : 'Search tags (e.g. 3d, animation)...',
             hintStyle: const TextStyle(color: Colors.white38),
             border: InputBorder.none,
             suffixIcon: _isLoadingSuggestions
@@ -117,7 +129,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     child: Center(
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.greenAccent,
+                        color: AppTheme.accent,
                       ),
                     ),
                   )
@@ -141,10 +153,10 @@ class _SearchScreenState extends State<SearchScreen> {
         actions: [
           TextButton(
             onPressed: _submitSearch,
-            child: const Text(
-              'Найти',
-              style: TextStyle(
-                color: Color(0xFF00C853),
+            child: Text(
+              AppStrings.of(context).search,
+              style: const TextStyle(
+                color: AppTheme.accent,
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
@@ -159,7 +171,7 @@ class _SearchScreenState extends State<SearchScreen> {
           if (_selectedTags.isNotEmpty)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              color: const Color(0xFF1B1B24),
+              color: AppTheme.surface,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -173,8 +185,8 @@ class _SearchScreenState extends State<SearchScreen> {
                     runSpacing: 6,
                     children: _selectedTags.map((tag) {
                       return Chip(
-                        backgroundColor: const Color(0xFF00C853).withOpacity(0.2),
-                        side: const BorderSide(color: Color(0xFF00C853), width: 0.8),
+                        backgroundColor: AppTheme.raised,
+                        side: const BorderSide(color: AppTheme.accent, width: 0.8),
                         label: Text(
                           tag,
                           style: const TextStyle(
@@ -199,7 +211,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 itemBuilder: (context, idx) {
                   final item = _suggestions[idx];
                   return ListTile(
-                    leading: const Icon(Icons.tag, color: Colors.greenAccent, size: 20),
+                    leading: const Icon(Icons.tag, color: AppTheme.accent, size: 20),
                     title: Text(
                       item.value,
                       style: const TextStyle(

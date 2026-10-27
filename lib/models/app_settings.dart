@@ -4,7 +4,9 @@ class AppSettings {
   final double customMinDuration;
   final String r34UserId;
   final String r34ApiKey;
-  final String booruSource; // 'rule34', 'tbib', 'safebooru'
+  final String gelbooruUserId;
+  final String gelbooruApiKey;
+  final String booruSource; // 'rule34', 'realbooru', 'gelbooru', 'tbib', 'safebooru'
   final bool enableDoh;
   final String dohProvider; // 'cloudflare', 'google', 'adguard', 'custom'
   final String customDohUrl;
@@ -14,6 +16,7 @@ class AppSettings {
   final bool autoPlay;
   final double defaultPlaybackSpeed;
   final bool muteByDefault;
+  final String language; // 'ru' or 'en'
 
   AppSettings({
     List<String>? blacklistedTags,
@@ -21,6 +24,8 @@ class AppSettings {
     this.customMinDuration = 120.0,
     this.r34UserId = '',
     this.r34ApiKey = '',
+    this.gelbooruUserId = '',
+    this.gelbooruApiKey = '',
     this.booruSource = 'rule34',
     this.enableDoh = false,
     this.dohProvider = 'cloudflare',
@@ -31,6 +36,7 @@ class AppSettings {
     this.autoPlay = true,
     this.defaultPlaybackSpeed = 1.0,
     this.muteByDefault = false,
+    this.language = 'ru',
   }) : blacklistedTags = blacklistedTags ?? [
           'guro',
           'scat',
@@ -43,6 +49,8 @@ class AppSettings {
       'customMinDuration': customMinDuration,
       'r34UserId': r34UserId,
       'r34ApiKey': r34ApiKey,
+      'gelbooruUserId': gelbooruUserId,
+      'gelbooruApiKey': gelbooruApiKey,
       'booruSource': booruSource,
       'enableDoh': enableDoh,
       'dohProvider': dohProvider,
@@ -53,6 +61,7 @@ class AppSettings {
       'autoPlay': autoPlay,
       'defaultPlaybackSpeed': defaultPlaybackSpeed,
       'muteByDefault': muteByDefault,
+      'language': language,
     };
   }
 
@@ -67,6 +76,8 @@ class AppSettings {
       customMinDuration: (json['customMinDuration'] as num?)?.toDouble() ?? 120.0,
       r34UserId: json['r34UserId']?.toString() ?? '',
       r34ApiKey: json['r34ApiKey']?.toString() ?? '',
+      gelbooruUserId: json['gelbooruUserId']?.toString() ?? '',
+      gelbooruApiKey: json['gelbooruApiKey']?.toString() ?? '',
       booruSource: json['booruSource']?.toString() ?? 'rule34',
       enableDoh: json['enableDoh'] == true,
       dohProvider: json['dohProvider'] ?? 'cloudflare',
@@ -77,6 +88,7 @@ class AppSettings {
       autoPlay: json['autoPlay'] ?? true,
       defaultPlaybackSpeed: (json['defaultPlaybackSpeed'] as num?)?.toDouble() ?? 1.0,
       muteByDefault: json['muteByDefault'] == true,
+      language: json['language']?.toString() ?? 'ru',
     );
   }
 
@@ -86,6 +98,8 @@ class AppSettings {
     double? customMinDuration,
     String? r34UserId,
     String? r34ApiKey,
+    String? gelbooruUserId,
+    String? gelbooruApiKey,
     String? booruSource,
     bool? enableDoh,
     String? dohProvider,
@@ -96,6 +110,7 @@ class AppSettings {
     bool? autoPlay,
     double? defaultPlaybackSpeed,
     bool? muteByDefault,
+    String? language,
   }) {
     return AppSettings(
       blacklistedTags: blacklistedTags ?? List.from(this.blacklistedTags),
@@ -103,6 +118,8 @@ class AppSettings {
       customMinDuration: customMinDuration ?? this.customMinDuration,
       r34UserId: r34UserId ?? this.r34UserId,
       r34ApiKey: r34ApiKey ?? this.r34ApiKey,
+      gelbooruUserId: gelbooruUserId ?? this.gelbooruUserId,
+      gelbooruApiKey: gelbooruApiKey ?? this.gelbooruApiKey,
       booruSource: booruSource ?? this.booruSource,
       enableDoh: enableDoh ?? this.enableDoh,
       dohProvider: dohProvider ?? this.dohProvider,
@@ -113,6 +130,7 @@ class AppSettings {
       autoPlay: autoPlay ?? this.autoPlay,
       defaultPlaybackSpeed: defaultPlaybackSpeed ?? this.defaultPlaybackSpeed,
       muteByDefault: muteByDefault ?? this.muteByDefault,
+      language: language ?? this.language,
     );
   }
 }

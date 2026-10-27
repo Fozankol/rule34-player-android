@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/post_model.dart';
 import 'duration_badge.dart';
+import '../theme/app_theme.dart';
 
 class VideoGridCard extends StatelessWidget {
   final PostModel post;
@@ -18,18 +19,17 @@ class VideoGridCard extends StatelessWidget {
     final hasValidPreview =
         post.previewUrl.isNotEmpty && post.previewUrl.startsWith('http');
 
-    final imageHeaders = <String, String>{
-      'User-Agent': 'Rule34VideoPlayer/1.0',
-    };
-    if (post.previewUrl.contains('realbooru.com') || post.fileUrl.contains('realbooru.com')) {
-      imageHeaders['Referer'] = 'https://realbooru.com/';
-    }
+    final imageHeaders = getMediaHeaders(
+      post.previewUrl.isNotEmpty ? post.previewUrl : post.fileUrl,
+      userAgent: 'Rule34VideoPlayer/1.0',
+    );
 
     return Card(
-      elevation: 3,
+      margin: EdgeInsets.zero,
+      elevation: 0,
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      color: const Color(0xFF1E1E24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: AppTheme.surface,
       child: InkWell(
         onTap: onTap,
         child: Stack(
@@ -44,7 +44,7 @@ class VideoGridCard extends StatelessWidget {
                 placeholder: (context, url) => Container(
                   color: Colors.black26,
                   child: const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00C853)),
+                    child: Icon(Icons.image_outlined, size: 30, color: AppTheme.muted),
                   ),
                 ),
                 errorWidget: (context, url, error) => Container(
@@ -91,7 +91,7 @@ class VideoGridCard extends StatelessWidget {
               top: 6,
               left: 6,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                 decoration: BoxDecoration(
                   color: Colors.black54,
                   borderRadius: BorderRadius.circular(4),
@@ -99,13 +99,15 @@ class VideoGridCard extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.favorite, size: 10, color: Colors.redAccent),
+                    const Icon(Icons.favorite_rounded, size: 12, color: AppTheme.error),
                     const SizedBox(width: 3),
                     Text(
-                      '${post.score}',
+                      post.hasExactScore
+                          ? '${post.score}'
+                          : (post.score > 0 ? '${post.score}+' : '...'),
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 10,
+                        fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -161,9 +163,9 @@ class VideoGridCard extends StatelessWidget {
                   : Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E88E5).withOpacity(0.85),
+                        color: AppTheme.surface,
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.blueAccent.withOpacity(0.5), width: 0.8),
+                        border: Border.all(color: AppTheme.muted.withAlpha(128), width: 0.8),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,

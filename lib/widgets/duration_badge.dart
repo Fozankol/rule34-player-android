@@ -1,6 +1,6 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../models/post_model.dart';
+import '../theme/app_theme.dart';
 
 class DurationBadge extends StatelessWidget {
   final PostModel post;
@@ -18,7 +18,7 @@ class DurationBadge extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.75),
+          color: Colors.black.withAlpha(191),
           borderRadius: BorderRadius.circular(4),
           border: Border.all(color: Colors.white24, width: 0.5),
         ),
@@ -35,7 +35,7 @@ class DurationBadge extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             Text(
-              'PROBING',
+              'Проверяем',
               style: TextStyle(
                 color: Colors.amberAccent,
                 fontSize: fontSize - 2,
@@ -55,18 +55,18 @@ class DurationBadge extends StatelessWidget {
     final isLongVideo = post.duration! >= 120.0; // >= 2 minutes
     final isVeryLongVideo = post.duration! >= 600.0; // >= 10 minutes
 
-    Color badgeColor = Colors.black.withOpacity(0.75);
+    Color badgeColor = Colors.black.withAlpha(191);
     Color textColor = Colors.white;
     Color borderColor = Colors.white24;
 
     if (isVeryLongVideo) {
-      badgeColor = const Color(0xFF6200EA).withOpacity(0.85); // Deep Purple
-      textColor = const Color(0xFFFFD700); // Gold
-      borderColor = Colors.amberAccent.withOpacity(0.6);
+      badgeColor = AppTheme.raised;
+      textColor = AppTheme.accent;
+      borderColor = AppTheme.accent.withAlpha(102);
     } else if (isLongVideo) {
-      badgeColor = const Color(0xFF004D40).withOpacity(0.85); // Emerald Green
-      textColor = const Color(0xFF69F0AE);
-      borderColor = Colors.greenAccent.withOpacity(0.5);
+      badgeColor = AppTheme.surface;
+      textColor = AppTheme.text;
+      borderColor = Colors.white24;
     }
 
     return Container(
