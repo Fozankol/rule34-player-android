@@ -212,6 +212,19 @@ class VideoPreloadService {
           return f;
         }
       }
+      try {
+        final matches = dir.listSync().whereType<File>().where((f) {
+          final name = p.basename(f.path);
+          return (name.startsWith('video_${post.id}.') || name.startsWith('preload_${post.id}.')) && !name.endsWith('.tmp');
+        });
+        for (final f in matches) {
+          if (f.existsSync() && f.lengthSync() > 0) {
+            _registerCachedFile(post.id, f.path, f.lengthSync());
+            post.localFilePath = f.path;
+            return f;
+          }
+        }
+      } catch (_) {}
     }
 
     return null;

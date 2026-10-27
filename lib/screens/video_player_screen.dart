@@ -78,8 +78,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         : PageView.builder(
             controller: _pageController, scrollDirection: Axis.vertical,
             itemCount: _posts.length,
-            // Adjacent widgets are cheap; only the current page owns a decoder.
-            allowImplicitScrolling: false,
+            // Keep adjacent page mounted for instant bidirectional resume
+            allowImplicitScrolling: true,
             onPageChanged: (index) {
               setState(() => _currentIndex = index);
               _loadMore();

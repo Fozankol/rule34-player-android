@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/post_model.dart';
 import '../models/download_item.dart';
 import '../providers/favorites_provider.dart';
@@ -89,11 +90,23 @@ class _ReelsPlayerItemState extends State<ReelsPlayerItem> with WidgetsBindingOb
       _release();
     }
     if (!widget.isCurrent) {
-      _release();
+      if (_controller != null && _isInitialized) {
+        _controller?.pause();
+        _wasPlaying = false;
+        _hideTimer?.cancel();
+      } else {
+        _release();
+      }
     } else if (!oldWidget.isCurrent || widget.post.fileUrl != oldWidget.post.fileUrl) {
       _codecRecoveryUsed = false;
       _controlsVisible = true;
-      _initPlayer();
+      if (_controller != null && _isInitialized && _error == null) {
+        _controller!.play();
+        _scheduleHide();
+        setState(() {});
+      } else {
+        _initPlayer();
+      }
     }
   }
 
@@ -337,6 +350,16 @@ class _ReelsPlayerItemState extends State<ReelsPlayerItem> with WidgetsBindingOb
     final controller = _controller;
 
     return ColoredBox(color: Colors.black, child: Stack(fit: StackFit.expand, children: [
+        if (widget.post.previewUrl.isNotEmpty)
+          Positioned.fill(
+            child: CachedNetworkImage(
+              imageUrl: widget.post.previewUrl,
+              httpHeaders: getMediaHeaders(widget.post.previewUrl),
+              fit: BoxFit.contain,
+              placeholder: (_, __) => const SizedBox(),
+              errorWidget: (_, __, ___) => const SizedBox(),
+            ),
+          ),
         if (_error != null) _errorView()
         else if (_isInitialized && controller != null) ...[
           Center(child: AspectRatio(aspectRatio: controller.value.aspectRatio, child: VideoPlayer(controller))),
@@ -348,8 +371,8 @@ class _ReelsPlayerItemState extends State<ReelsPlayerItem> with WidgetsBindingOb
               onTap: _toggleControls, onDoubleTap: () => _seek(10))),
           ]),
         ] else Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const SizedBox(width: 30, height: 30, child: CircularProgressIndicator(strokeWidth: 2)),
-          const SizedBox(height: 16), Text(tr.loadingVideo, style: const TextStyle(color: AppTheme.muted)),
+          const SizedBox(width: 30, height: 30, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent)),
+          const SizedBox(height: 16), Text(tr.loadingVideo, style: const TextStyle(color: Colors.white70)),
         ])),
       if (_controlsVisible) Positioned(
         top: MediaQuery.of(context).padding.top + 8, left: 12, right: 12,

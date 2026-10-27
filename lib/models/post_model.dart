@@ -1,8 +1,7 @@
 Map<String, String> getMediaHeaders(String url, {String? userAgent}) {
   final headers = <String, String>{};
-  if (userAgent != null) {
-    headers['User-Agent'] = userAgent;
-  }
+  headers['User-Agent'] = userAgent ??
+      'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36';
   final lower = url.toLowerCase();
   if (lower.contains('realbooru.com')) {
     headers['Referer'] = 'https://realbooru.com/';
